@@ -77,7 +77,7 @@ async function handleChangePin(e) {
             if (!trimmed) {
                 if (!isAdminLabel) {
                     auth.heirPins[index - 1] = '';
-                    saveAuth();
+                    await saveAuth();
                     renderPinsManagement();
                     showToast(`PIN pre ${state.participants[index - 1].name} bol zruseny`, 'success');
                 }
@@ -108,7 +108,7 @@ async function handleChangePin(e) {
             }
             auth.authVersion = AUTH_VERSION;
 
-            saveAuth();
+            await saveAuth();
             renderPinsManagement();
             showToast(`${label} bol zmeneny`, 'success');
             return true;
@@ -127,9 +127,9 @@ function handleRemovePin(e) {
         title: 'Zrušiť PIN',
         message: `Naozaj chcete zrušiť PIN pre ${name}? Dedič sa potom nebude môcť prihlásiť.`,
         confirmText: 'Zrušiť PIN',
-        onConfirm: () => {
+        onConfirm: async () => {
             auth.heirPins[index - 1] = '';
-            saveAuth();
+            await saveAuth();
             renderPinsManagement();
             showToast(`PIN pre ${name} bol zrušený`, 'success');
         },
@@ -187,7 +187,7 @@ async function handleSetup(e) {
 
     // Auto-login as admin (save after currentUser for remember-me)
     auth.currentUser = { role: 'admin' };
-    saveAuth();
+    await saveAuth();
     startInactivityTimer();
     renderAuthUI();
     renderAll();
@@ -222,9 +222,9 @@ async function handleLogin(e) {
     }
 }
 
-function handleLogout(e) {
+async function handleLogout(e) {
     if (e) e.preventDefault();
-    logout();
+    await logout();
     showToast('Odhlásený', 'success');
 }
 
@@ -234,8 +234,8 @@ function handleForgotPin(e) {
         title: 'Zabudnutý PIN',
         message: 'Naozaj chcete vymazať všetky PIN-y? Po potvrdení sa zobrazí úvodné nastavenie, kde si nastavíte nové PIN-y.\\n\\nDáta o majetku a alokáciách ostanú zachované.',
         confirmText: 'Vymazať PIN-y',
-        onConfirm: () => {
-            clearAuth();
+        onConfirm: async () => {
+            await clearAuth();
             renderAuthUI();
             if (auth.adminPin) {
                 renderPinsManagement();
@@ -248,7 +248,7 @@ function handleForgotPin(e) {
 // ==============================
 // Actions
 // ==============================
-export function addItem(name, value, category) {
+export async function addItem(name, value, category) {
     const item = {
         id: state.nextItemId++,
         name: name.trim(),
@@ -262,31 +262,31 @@ export function addItem(name, value, category) {
         state.categories.sort();
     }
     state.items.push(item);
-    saveState();
+    await saveState();
     renderAll();
     showToast(`Pridaná položka "${item.name}" v hodnote ${formatEUR(item.value)}`, 'success');
 }
 
-export function deleteItem(itemId) {
+export async function deleteItem(itemId) {
     const item = state.items.find((i) => i.id === itemId);
     if (!item) return;
     state.items = state.items.filter((i) => i.id !== itemId);
-    saveState();
+    await saveState();
     renderAll();
     showToast(`Odstránená položka "${item.name}"`, 'success');
 }
 
-export function updateItemValue(itemId, newValue) {
+export async function updateItemValue(itemId, newValue) {
     const item = state.items.find((i) => i.id === itemId);
     if (!item) return;
     // Cash system items are auto-calculated — value change is ignored
     if (item.isSystem) return;
     item.value = Math.max(0, newValue);
-    saveState();
+    await saveState();
     renderAll();
 }
 
-export function setAllocation(itemId, participantId, percentage) {
+export async function setAllocation(itemId, participantId, percentage) {
     const item = state.items.find((i) => i.id === itemId);
     if (!item) return;
 
@@ -332,11 +332,11 @@ export function setAllocation(itemId, participantId, percentage) {
         }
     }
 
-    saveState();
+    await saveState();
     renderAll();
 }
 
-export function updateParticipantName(participantId, newName) {
+export async function updateParticipantName(participantId, newName) {
     const p = state.participants.find((p) => p.id === participantId);
     if (!p) return;
 
@@ -348,11 +348,11 @@ export function updateParticipantName(participantId, newName) {
     }
 
     p.name = trimmed;
-    saveState();
+    await saveState();
     renderAll();
 }
 
-export function resetParticipantColor(participantId) {
+export async function resetParticipantColor(participantId) {
     const defaultColor = DEFAULT_COLORS[participantId];
     if (!defaultColor) return;
     if (!state.participantColors) {
@@ -361,18 +361,18 @@ export function resetParticipantColor(participantId) {
     }
     state.participantColors[participantId] = defaultColor;
     applyColorVariables();
-    saveState();
+    await saveState();
     renderAll();
     showToast(`Farba účastníka bola vrátená na predvolenú`, 'success');
 }
 
-export function updateParticipantColor(participantId, newColor) {
+export async function updateParticipantColor(participantId, newColor) {
     if (!state.participantColors) {
         state.participantColors = [...DEFAULT_COLORS];
     }
     state.participantColors[participantId] = newColor;
     applyColorVariables();
-    saveState();
+    await saveState();
     renderAll();
 }
 
@@ -390,7 +390,7 @@ export function applyColorVariables() {
 // ==============================
 // Event Handlers
 // ==============================
-function handleAddItem(e) {
+async function handleAddItem(e) {
     e.preventDefault();
     const name = itemNameInput.value.trim();
     const value = parseEUR(itemValueInput.value);
@@ -408,7 +408,7 @@ function handleAddItem(e) {
     }
 
     const category = itemCategoryInput.value.trim();
-    addItem(name, value, category);
+    await addItem(name, value, category);
     form.reset();
     itemNameInput.focus();
 }
@@ -435,12 +435,12 @@ function handleAllocInput(e) {
     }
 }
 
-function handleAllocationChange(e) {
+async function handleAllocationChange(e) {
     const input = e.target;
     const itemId = parseInt(input.dataset.itemId);
     const participantId = parseInt(input.dataset.participantId);
     const pct = parseEUR(input.value);
-    setAllocation(itemId, participantId, pct);
+    await setAllocation(itemId, participantId, pct);
 }
 
 function handleDeleteItem(btn) {
@@ -452,16 +452,16 @@ function handleDeleteItem(btn) {
         title: 'Odstrániť položku',
         message: `Naozaj chcete odstrániť položku "${item.name}" v hodnote ${item.value.toFixed(2)} €?`,
         confirmText: 'Odstrániť',
-        onConfirm: () => deleteItem(itemId),
+        onConfirm: async () => deleteItem(itemId),
     });
 }
 
-function handleValueChange(e) {
+async function handleValueChange(e) {
     const input = e.currentTarget;
     const itemId = parseInt(input.dataset.itemId);
     const newValue = parseEUR(input.value);
     if (newValue >= 0) {
-        updateItemValue(itemId, newValue);
+        await updateItemValue(itemId, newValue);
     } else {
         showToast('Hodnota musí byť kladné číslo', 'error');
         renderItems();
@@ -483,7 +483,7 @@ function handleParticipantNameClick(nameEl) {
     input.focus();
     input.select();
 
-    function commitRename() {
+    async function commitRename() {
         const newName = input.value.trim();
         const newNameEl = document.createElement('h3');
         newNameEl.className = 'participant-name participant-name-editable';
@@ -493,12 +493,12 @@ function handleParticipantNameClick(nameEl) {
         input.replaceWith(newNameEl);
 
         if (newName && newName !== currentName) {
-            updateParticipantName(participantId, newName);
+            await updateParticipantName(participantId, newName);
         }
     }
 
     input.addEventListener('blur', commitRename);
-    input.addEventListener('keydown', (e) => {
+    input.addEventListener('keydown', async (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
             input.blur();
@@ -510,7 +510,7 @@ function handleParticipantNameClick(nameEl) {
     });
 }
 
-function handleExpenseParticipantNameClick(nameEl) {
+async function handleExpenseParticipantNameClick(nameEl) {
     const row = nameEl.closest('.expense-row');
     if (!row) return;
 
@@ -543,7 +543,7 @@ function handleExpenseParticipantNameClick(nameEl) {
         select.replaceWith(span);
     }
 
-    function commit() {
+    async function commit() {
         if (handled) return;
         handled = true;
 
@@ -555,7 +555,7 @@ function handleExpenseParticipantNameClick(nameEl) {
 
         exp.participantId = nextId;
         syncCashItem();
-        saveState();
+        await saveState();
         renderAll();
 
         const p = state.participants.find(x => x.id === nextId);
@@ -578,10 +578,10 @@ function handleExpenseParticipantNameClick(nameEl) {
     });
 }
 
-function handleParticipantColorChange(e) {
+async function handleParticipantColorChange(e) {
     const input = e.target;
     const participantId = parseInt(input.dataset.participantId);
-    updateParticipantColor(participantId, input.value);
+    await updateParticipantColor(participantId, input.value);
 }
 
 function handlePrint(e) {
@@ -619,9 +619,9 @@ function exportData() {
     showToast('Dáta boli exportované', 'success');
 }
 
-function importData(file) {
+async function importData(file) {
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
         try {
             const data = JSON.parse(e.target.result);
             if (!data || !Array.isArray(data.items)) {
@@ -678,7 +678,7 @@ function importData(file) {
             state.nextExpenseId = data.nextExpenseId || 1;
 
             syncCashItem();
-            saveState();
+            await saveState();
             renderAll();
             showToast(`Importovaných ${state.items.length} položiek`, 'success');
         } catch (err) {
@@ -698,10 +698,10 @@ function handleImportClick(e) {
     importInput.click();
 }
 
-function handleImportFile(e) {
+async function handleImportFile(e) {
     const file = e.currentTarget.files[0];
     if (file) {
-        importData(file);
+        await importData(file);
     }
     e.currentTarget.value = '';
 }
@@ -714,7 +714,7 @@ function handleReset(e) {
         title: 'Vymazať všetky dáta',
         message: 'Naozaj chcete vymazať všetky dáta? Táto akcia je nevratná a všetky položky, alokácie aj mená účastníkov sa stratia.',
         confirmText: 'Vymazať všetko',
-        onConfirm: () => {
+        onConfirm: async () => {
             state.items = [];
             state.nextItemId = 1;
             state.categories = [];
@@ -726,7 +726,7 @@ function handleReset(e) {
             state.items.push(getCashItemTemplate());
             state.items.push(getCashExpenseItemTemplate());
             syncCashItem();
-            clearSavedState();
+            await clearSavedState();
             renderAll();
             showToast('Všetky dáta boli vymazané', 'success');
         },
@@ -738,12 +738,12 @@ function handleReset(e) {
 // ==============================
 async function init() {
     // Load auth first
-    loadAuth();
+    await loadAuth();
 
     // Migrate existing plain-text PINs to hashed format
     await migrateAuthToHashed();
 
-    loadState();
+    await loadState();
 
     // Bind auth form events
     $('#setup-form')?.addEventListener('submit', handleSetup);
@@ -867,21 +867,21 @@ async function init() {
     }
 
     // Participant tag removal (delegated via participants-grid)
-    document.querySelector('#participants-grid').addEventListener('click', (e) => {
+    document.querySelector('#participants-grid').addEventListener('click', async (e) => {
         const tag = e.target.closest('.tag-remove');
         if (tag) {
             const itemId = parseInt(tag.dataset.itemId);
             const participantId = parseInt(tag.dataset.participantId);
-            setAllocation(itemId, participantId, 0);
+            await setAllocation(itemId, participantId, 0);
         }
     });
 
     // Expense delete (delegated via expense-list)
-    document.querySelector('#expense-list')?.addEventListener('click', (e) => {
+    document.querySelector('#expense-list')?.addEventListener('click', async (e) => {
         const btn = e.target.closest('.expense-delete');
         if (btn) {
             const id = parseInt(btn.dataset.expenseId);
-            handleDeleteExpense(id);
+            await handleDeleteExpense(id);
         }
     });
 
@@ -901,11 +901,11 @@ async function init() {
     });
 
     // Color reset events (delegated)
-    document.querySelector('#participants-grid').addEventListener('click', (e) => {
+    document.querySelector('#participants-grid').addEventListener('click', async (e) => {
         const btn = e.target.closest('.color-reset');
         if (btn) {
             const participantId = parseInt(btn.dataset.participantId);
-            resetParticipantColor(participantId);
+            await resetParticipantColor(participantId);
         }
     });
 

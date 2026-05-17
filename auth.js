@@ -2,8 +2,10 @@
  * Dedičské konanie – Auth Module (ES Module)
  *
  * PIN hashing, session management, login/logout, permission helpers.
+ * PIN hashes are stored in Supabase (shared across browsers).
  */
 
+import { supabase } from './supabase.js';
 import { showToast, renderAuthUI } from './ui.js';
 
 // ==============================
@@ -69,45 +71,125 @@ export function getAuth() {
     return _auth;
 }
 
-export function saveAuth(options = {}) {
+export async function saveAuth(options = {}) {
     const { persistSession = true } = options;
+    const payload = {
+        admin_pin: _auth.adminPin,
+        heir_pins: _auth.heirPins,
+        auth_version: _auth.authVersion || AUTH_VERSION,
+    };
+
+    // Save to Supabase
     try {
-        const data = {
+        const { error } = await supabase
+            .from('pins')
+            .upsert(
+                { id: 1, ...payload, updated_at: new Date().toISOString() },
+                { onConflict: 'id' }
+            );
+        if (error) {
+            console.warn('Supabase pins save error:', error);
+        }
+    } catch (e) {
+        console.warn('Supabase pins save failed, using localStorage fallback:', e);
+    }
+
+    // Also save session to localStorage (browser-specific session)
+    try {
+        const sessionData = {
             adminPin: _auth.adminPin,
             heirPins: _auth.heirPins,
             authVersion: _auth.authVersion || AUTH_VERSION,
         };
         if (persistSession && _auth.currentUser) {
-            data.currentUser = _auth.currentUser;
+            sessionData.currentUser = _auth.currentUser;
         }
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data));
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessionData));
     } catch (e) {
-        console.warn('Nepodarilo sa uložiť auth:', e);
+        console.warn('localStorage auth save failed:', e);
     }
 }
 
-export function loadAuth() {
+export async function loadAuth() {
+    let supabaseHadData = false;
+
+    // Try Supabase first
+    try {
+        const { data, error } = await supabase
+            .from('pins')
+            .select('admin_pin, heir_pins, auth_version')
+            .eq('id', 1)
+            .single();
+
+        if (!error && data) {
+            supabaseHadData = true;
+            if (data.admin_pin) _auth.adminPin = data.admin_pin;
+            if (Array.isArray(data.heir_pins) && data.heir_pins.length === 4) {
+                _auth.heirPins = data.heir_pins;
+            }
+            if (typeof data.auth_version === 'number') {
+                _auth.authVersion = data.auth_version;
+            }
+            console.log('PIN-y načítané zo Supabase');
+        }
+    } catch (e) {
+        console.warn('Supabase auth load failed, trying localStorage:', e);
+    }
+
+    // Fallback to localStorage (only if Supabase didn't have data)
+    // Always restore currentUser from localStorage (browser-specific session)
     try {
         const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-        if (!raw) return false;
-        const data = JSON.parse(raw);
-        if (data.adminPin) _auth.adminPin = data.adminPin;
-        if (Array.isArray(data.heirPins) && data.heirPins.length === 4) {
-            _auth.heirPins = data.heirPins;
+        if (raw) {
+            const data = JSON.parse(raw);
+            if (!supabaseHadData) {
+                if (data.adminPin) _auth.adminPin = data.adminPin;
+                if (Array.isArray(data.heirPins) && data.heirPins.length === 4) {
+                    _auth.heirPins = data.heirPins;
+                }
+                if (data.authVersion) _auth.authVersion = data.authVersion;
+            }
+            // Restore currentUser (remember me) - this is always browser-specific
+            if (data.currentUser) {
+                _auth.currentUser = data.currentUser;
+            }
+            return true;
         }
-        // Restore currentUser (remember me)
-        if (data.currentUser) {
-            _auth.currentUser = data.currentUser;
-        }
-        return true;
     } catch (e) {
-        return false;
+        // ignore
     }
+
+    return supabaseHadData || !!_auth.adminPin;
 }
 
-export function clearAuth() {
+export async function clearAuth() {
     stopInactivityTimer();
-    localStorage.removeItem(AUTH_STORAGE_KEY);
+
+    // Clear Supabase pins
+    try {
+        await supabase
+            .from('pins')
+            .upsert(
+                {
+                    id: 1,
+                    admin_pin: '',
+                    heir_pins: ['', '', '', ''],
+                    auth_version: AUTH_VERSION,
+                    updated_at: new Date().toISOString(),
+                },
+                { onConflict: 'id' }
+            );
+    } catch (e) {
+        console.warn('Supabase pins clear failed:', e);
+    }
+
+    // Clear localStorage
+    try {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch (e) {
+        // ignore
+    }
+
     _auth.adminPin = '';
     _auth.heirPins = ['', '', '', ''];
     _auth.currentUser = null;
@@ -118,16 +200,19 @@ export async function login(pin, rememberMe = true) {
     // Hash the input PIN for comparison
     const hashedPin = await hashPin(pin);
 
+    // Ensure latest PINs are loaded from Supabase
+    await loadAuth();
+
     if (hashedPin === _auth.adminPin) {
         _auth.currentUser = { role: 'admin' };
-        saveAuth({ persistSession: rememberMe });
+        await saveAuth({ persistSession: rememberMe });
         startInactivityTimer();
         return true;
     }
     for (let i = 0; i < _auth.heirPins.length; i++) {
         if (_auth.heirPins[i] === hashedPin) {
             _auth.currentUser = { role: 'heir', index: i };
-            saveAuth({ persistSession: rememberMe });
+            await saveAuth({ persistSession: rememberMe });
             startInactivityTimer();
             return true;
         }
@@ -135,10 +220,10 @@ export async function login(pin, rememberMe = true) {
     return false;
 }
 
-export function logout() {
+export async function logout() {
     stopInactivityTimer();
     _auth.currentUser = null;
-    saveAuth();
+    await saveAuth();
     renderAuthUI();
 }
 
@@ -182,7 +267,7 @@ export async function migrateAuthToHashed() {
     }
     if (changed) {
         _auth.authVersion = AUTH_VERSION;
-        saveAuth();
+        await saveAuth();
     }
     return changed;
 }

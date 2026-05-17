@@ -1,2 +1,6 @@
 node_modules/
 package-lock.json
+
+# Lokálne testovacie súbory (voliteľné)
+# config.js  – Supabase anon key je verejný, commitujeme ho
+config.example.js

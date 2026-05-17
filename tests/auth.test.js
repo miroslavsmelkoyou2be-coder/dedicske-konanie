@@ -44,13 +44,13 @@ export async function testAuth({ window, document }) {
     a1.adminPin = 'hashed_admin_pin_123';
     a1.heirPins = ['hashed_heir_0', '', 'hashed_heir_2', ''];
     a1.currentUser = { role: 'admin' };
-    saveAuth({ persistSession: true });
+    await saveAuth({ persistSession: true });
 
     a1.adminPin = '';
     a1.heirPins = ['', '', '', ''];
     a1.currentUser = null;
 
-    const found = loadAuth();
+    const found = await loadAuth();
     assert(found, 'loadAuth returns true when data exists');
     assertEqual(a1.adminPin, 'hashed_admin_pin_123', 'Admin PIN restored from storage');
     assertEqual(a1.heirPins[0], 'hashed_heir_0', 'Heir 0 PIN restored');
@@ -60,8 +60,8 @@ export async function testAuth({ window, document }) {
     // ─── loadAuth without data / clearAuth ────────────────
     console.log('  \u2500\u2500 loadAuth - no data / clearAuth');
 
-    clearAuth();
-    const notFound = loadAuth();
+    await clearAuth();
+    const notFound = await loadAuth();
     assert(!notFound, 'loadAuth returns false when no data');
     assertEqual(a1.adminPin, '', 'adminPin empty after clearAuth');
     assertEqual(a1.currentUser, null, 'currentUser null after clearAuth');
@@ -83,7 +83,7 @@ export async function testAuth({ window, document }) {
     assert(adminLogin, 'login with correct admin PIN returns true');
     assert(isAdmin(), 'isAdmin() true after admin login');
 
-    logout();
+    await logout();
     assert(!isAdmin(), 'isAdmin() false after logout');
     assertEqual(a2.currentUser, null, 'currentUser null after logout');
 
@@ -93,7 +93,7 @@ export async function testAuth({ window, document }) {
     assert(isHeir(1), 'isHeir(1) true for heir 1');
     assert(!isHeir(0), 'isHeir(0) false for heir 1');
 
-    logout();
+    await logout();
 
     // ─── Permission helpers ────────────────────────────────
     console.log('  \u2500\u2500 Permission helpers');
@@ -102,6 +102,13 @@ export async function testAuth({ window, document }) {
     a3.adminPin = await hashPin('admin');
     a3.heirPins = ['', await hashPin('heir1'), '', ''];
     a3.currentUser = null;
+
+    // Save to localStorage so login() -> loadAuth() can find them
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({
+        adminPin: a3.adminPin,
+        heirPins: a3.heirPins,
+        authVersion: AUTH_VERSION,
+    }));
 
     assert(!canEditItems(), 'canEditItems false when not logged in');
     assert(!canEditAllocations(0), 'canEditAllocations false when not logged in');
@@ -112,7 +119,7 @@ export async function testAuth({ window, document }) {
     assert(canEditAllocations(0), 'canEditAllocations true for admin');
     assert(canEditAllocations(1), 'canEditAllocations true for any participant');
     assert(canEditParticipant(0), 'canEditParticipant true for admin');
-    logout();
+    await logout();
 
     await login('heir1');
     assert(!canEditItems(), 'canEditItems false for heir');
@@ -120,13 +127,13 @@ export async function testAuth({ window, document }) {
     assert(!canEditAllocations(0), 'canEditAllocations(0) false for heir 1 (other)');
     assert(canEditParticipant(1), 'canEditParticipant(1) true for heir 1 (self)');
     assert(!canEditParticipant(0), 'canEditParticipant(0) false for heir 1 (other)');
-    logout();
+    await logout();
 
     // ─── migrateAuthToHashed ──────────────────────────────
     console.log('  \u2500\u2500 migrateAuthToHashed');
 
     const a4 = getAuth();
-    clearAuth();
+    await clearAuth();
     a4.adminPin = '1234'; // plain text (len 4 < 64)
     a4.heirPins = ['5678', '0000', '', '9999'];
     a4.authVersion = 1; // old version
@@ -142,7 +149,7 @@ export async function testAuth({ window, document }) {
     const changedAgain = await migrateAuthToHashed();
     assert(!changedAgain, 'Second migration returns false (no changes)');
 
-    clearAuth();
+    await clearAuth();
     a4.adminPin = 'hashed_already_64_chars_long_xxxxxxxxxxxxxxxx'; // fake 64-char hash
     a4.authVersion = AUTH_VERSION;
     const noChange = await migrateAuthToHashed();

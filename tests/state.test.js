@@ -178,7 +178,7 @@ export async function testState({ window, document }) {
     })();
 
     // ─── Persistence ─────────────────────────────────────
-    (() => {
+    await (async () => {
         console.log('  \u2500\u2500 Persistence');
         const st = s();
         st.items = [
@@ -191,7 +191,7 @@ export async function testState({ window, document }) {
         st.expenses = [{ id: 1, name: 'Pohreb', participantId: 0, value: 1000 }];
         st.nextExpenseId = 2;
 
-        saveState();
+        await saveState();
 
         // Reset state
         st.items = [];
@@ -201,7 +201,7 @@ export async function testState({ window, document }) {
         st.expenses = [];
         st.nextExpenseId = 0;
 
-        const loaded = loadState();
+        const loaded = await loadState();
         assert(loaded, 'loadState returns true');
         assertEqual(st.items.length, 2, 'Items restored');
         assertEqual(st.nextItemId, 3, 'nextItemId restored');
@@ -212,7 +212,7 @@ export async function testState({ window, document }) {
         assertEqual(st.items[1].allocations[0].percentage, 100, 'Allocations restored');
         assertEqual(st.participants[0].name, 'Zuzka', 'Participant names preserved');
 
-        clearSavedState();
+        await clearSavedState();
         assert(!window.localStorage.getItem(STORAGE_KEY), 'clearSavedState removes localStorage item');
     })();
 

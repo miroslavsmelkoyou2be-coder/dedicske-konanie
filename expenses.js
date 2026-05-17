@@ -9,15 +9,15 @@ import { showToast, renderAll, formatEUR, $ } from './ui.js';
 
 const state = getState();
 
-export function handleCashChange(e) {
+export async function handleCashChange(e) {
     const val = parseFloat(e.target.value);
     state.cash = isNaN(val) ? 0 : Math.max(0, val);
     syncCashItem();
-    saveState();
+    await saveState();
     renderAll();
 }
 
-export function handleAddExpense(e) {
+export async function handleAddExpense(e) {
     e.preventDefault();
 
     // Sync cash input value first (in case user didn't blur the field)
@@ -58,7 +58,7 @@ export function handleAddExpense(e) {
     });
 
     syncCashItem();
-    saveState();
+    await saveState();
     renderAll();
 
     // Reset form
@@ -69,7 +69,7 @@ export function handleAddExpense(e) {
     showToast(`Pridaný náklad "${name}" (${formatEUR(value)})`, 'success');
 }
 
-export function handleDeleteExpense(expenseId) {
+export async function handleDeleteExpense(expenseId) {
     const exp = state.expenses.find(e => e.id === expenseId);
     if (!exp) return;
 
@@ -83,7 +83,7 @@ export function handleDeleteExpense(expenseId) {
     state.expenses = state.expenses.filter(e => e.id !== expenseId);
 
     syncCashItem();
-    saveState();
+    await saveState();
     renderAll();
     showToast(`Odstránený náklad "${exp.name}"`, 'success');
 }

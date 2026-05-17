@@ -1,9 +1,11 @@
 /**
  * Dedičské konanie – State Module (ES Module)
  *
- * Pure data module — no imports from other project modules.
- * State management, localStorage persistence, business logic.
+ * Pure data module — no imports from other project modules (except supabase).
+ * State management, Supabase persistence, business logic.
  */
+
+import { supabase } from './supabase.js';
 
 // ==============================
 // Constants
@@ -115,89 +117,159 @@ export function getPBG(id) {
 }
 
 // ==============================
-// Persistence
+// Serialization helpers
 // ==============================
-export function saveState() {
+function serializeState() {
+    return {
+        storageVersion: STORAGE_VERSION,
+        items: _state.items,
+        nextItemId: _state.nextItemId,
+        categories: _state.categories,
+        participantNames: _state.participants.map(p => p.name),
+        participantColors: _state.participantColors,
+        cash: _state.cash,
+        expenses: _state.expenses,
+        nextExpenseId: _state.nextExpenseId,
+    };
+}
+
+function deserializeState(data) {
+    if (!data || typeof data !== 'object') return false;
+    if (!Array.isArray(data.items)) return false;
+
+    // Migrate old format (V2: assignedTo) to new (V3: allocations)
+    if (Array.isArray(data.items)) {
+        data.items.forEach(migrateItem);
+    }
+
+    _state.items = data.items || [];
+    _state.nextItemId = data.nextItemId || 1;
+    _state.categories = Array.isArray(data.categories) ? [...data.categories] : [];
+
+    // Ensure each item has a category field
+    _state.items.forEach(item => {
+        if (item.category === undefined) item.category = '';
+    });
+
+    if (Array.isArray(data.participantNames)) {
+        data.participantNames.forEach((name, i) => {
+            if (_state.participants[i]) {
+                _state.participants[i].name = name || DEFAULT_NAMES[i];
+            }
+        });
+    }
+
+    if (Array.isArray(data.participantColors)) {
+        _state.participantColors = data.participantColors;
+    } else {
+        _state.participantColors = [...DEFAULT_COLORS];
+    }
+
+    // Load cash & expenses
+    if (typeof data.cash === 'number') {
+        _state.cash = data.cash;
+    }
+    const expensesData = Array.isArray(data.expenses) ? data.expenses :
+                         (Array.isArray(data.funeralExpenses) ? data.funeralExpenses : null);
+    if (expensesData) {
+        _state.expenses = expensesData;
+    }
+    if (typeof data.nextExpenseId === 'number') {
+        _state.nextExpenseId = data.nextExpenseId;
+    }
+
+    return true;
+}
+
+// ==============================
+// Persistence (Supabase + localStorage fallback)
+// ==============================
+export async function saveState() {
+    const serialized = serializeState();
+
+    // Save to Supabase
     try {
-        const data = {
-            storageVersion: STORAGE_VERSION,
-            items: _state.items,
-            nextItemId: _state.nextItemId,
-            categories: _state.categories,
-            participantNames: _state.participants.map(p => p.name),
-            participantColors: _state.participantColors,
-            cash: _state.cash,
-            expenses: _state.expenses,
-            nextExpenseId: _state.nextExpenseId,
-        };
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        const { error } = await supabase
+            .from('app_data')
+            .upsert(
+                { id: 1, data: serialized, updated_at: new Date().toISOString() },
+                { onConflict: 'id' }
+            );
+        if (error) {
+            console.warn('Supabase save error:', error);
+        }
     } catch (e) {
-        console.warn('Nepodarilo sa uložiť dáta:', e);
+        console.warn('Supabase save failed, using localStorage fallback:', e);
+    }
+
+    // Also save to localStorage as cache/fallback
+    try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(serialized));
+    } catch (e) {
+        console.warn('localStorage save failed:', e);
     }
 }
 
-export function loadState() {
+export async function loadState() {
+    // Try Supabase first
+    try {
+        const { data, error } = await supabase
+            .from('app_data')
+            .select('data')
+            .eq('id', 1)
+            .single();
+
+        if (!error && data?.data) {
+            const loaded = deserializeState(data.data);
+            if (loaded) {
+                console.log('Dáta načítané zo Supabase');
+                return true;
+            }
+        }
+    } catch (e) {
+        console.warn('Supabase load failed, trying localStorage:', e);
+    }
+
+    // Fallback to localStorage
+    return fallbackLoadState();
+}
+
+function fallbackLoadState() {
     try {
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) return false;
 
         const data = JSON.parse(raw);
-        if (!data || !Array.isArray(data.items)) return false;
-
-        // Migrate old format (V2: assignedTo) to new (V3: allocations)
-        data.items.forEach(migrateItem);
-
-        // Log if version differs (data may have been saved with different shares)
-        if (data.storageVersion !== STORAGE_VERSION) {
-            console.log('Načítané dáta z inej verzie – migrácia prebehla automaticky');
+        const loaded = deserializeState(data);
+        if (loaded) {
+            console.log('Dáta načítané z localStorage (fallback)');
         }
-
-        _state.items = data.items;
-        _state.nextItemId = data.nextItemId || 1;
-        _state.categories = Array.isArray(data.categories) ? [...data.categories] : [];
-
-        // Ensure each item has a category field (migration from older version)
-        _state.items.forEach(item => {
-            if (item.category === undefined) item.category = '';
-        });
-
-        if (Array.isArray(data.participantNames)) {
-            data.participantNames.forEach((name, i) => {
-                if (_state.participants[i]) {
-                    _state.participants[i].name = name || DEFAULT_NAMES[i];
-                }
-            });
-        }
-
-        if (Array.isArray(data.participantColors)) {
-            _state.participantColors = data.participantColors;
-        } else {
-            _state.participantColors = [...DEFAULT_COLORS];
-        }
-
-        // Load cash & expenses
-        if (typeof data.cash === 'number') {
-            _state.cash = data.cash;
-        }
-        // Support old key 'funeralExpenses' for migration
-        const expensesData = Array.isArray(data.expenses) ? data.expenses :
-                             (Array.isArray(data.funeralExpenses) ? data.funeralExpenses : null);
-        if (expensesData) {
-            _state.expenses = expensesData;
-        }
-        if (typeof data.nextExpenseId === 'number') {
-            _state.nextExpenseId = data.nextExpenseId;
-        }
-
-        return true;
+        return loaded;
     } catch (e) {
-        console.warn('Nepodarilo sa načítať dáta:', e);
+        console.warn('localStorage load failed:', e);
         return false;
     }
 }
 
-export function clearSavedState() {
-    localStorage.removeItem(STORAGE_KEY);
+export async function clearSavedState() {
+    // Clear Supabase
+    try {
+        await supabase
+            .from('app_data')
+            .upsert(
+                { id: 1, data: {}, updated_at: new Date().toISOString() },
+                { onConflict: 'id' }
+            );
+    } catch (e) {
+        console.warn('Supabase clear failed:', e);
+    }
+
+    // Clear localStorage
+    try {
+        localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+        // ignore
+    }
 }
 
 // ==============================

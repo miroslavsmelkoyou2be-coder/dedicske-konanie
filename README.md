@@ -4,20 +4,33 @@
 
 Aplikácia na pomoc pri dedičskom konaní. Umožňuje spravovať majetok, alokovať ho medzi štyroch účastníkov (Zuzka 1/2, Dana 1/6, Katka 1/6, Miro 1/6), evidovať náklady a hotovosť, a sledovať limity každého účastníka.
 
-**Vanilla JS SPA** — bez frameworkov, všetko beží natívne v prehliadači. Dáta sa ukladajú do `localStorage`.
+**Vanilla JS SPA** — bez frameworkov, všetko beží natívne v prehliadači. Dáta sú zdieľané medzi všetkými používateľmi cez **Supabase** databázu, s automatickým fallbackom na `localStorage` pri vývoji offline.
 
 ---
 
 ## 🚀 Rýchly štart
 
+### 1. Nastavenie Supabase (produkcia)
+
+1. Vytvorte projekt na [supabase.com](https://supabase.com) (Free tier stačí)
+2. V Dashboard > Settings > API skopírujte **Project URL** a **anon public key**
+3. Otvorte **SQL Editor** a spustite `schema.sql` — vytvorí tabuľky `app_data` a `pins`
+4. Otvorte `config.js` a nahraďte hodnoty:
+```js
+export const SUPABASE_URL = 'https://vas-projekt.supabase.co';
+export const SUPABASE_ANON_KEY = 'vas-anon-key';
+```
+5. Nasadiť na Vercel (tlačidlom vyššie) alebo spustiť lokálne
+
+### 2. Lokálny vývoj (offline, localStorage fallback)
+
 ```bash
-# Spustenie lokálneho servera
 cd dedicske-konanie
 python3 -m http.server 8080 --bind 127.0.0.1
-
-# Otvor v prehliadači:
-# http://127.0.0.1:8080/
+# Otvor v prehliadači: http://127.0.0.1:8080/
 ```
+
+> Pri lokálnom vývoji bez Supabase sa dáta automaticky ukladajú do `localStorage`.
 
 Pri prvom spustení sa zobrazí nastavenie PIN-ov. Nastavte administrátorský PIN (max 6 číslic) a voliteľne PIN-y pre dedičov.
 
@@ -90,7 +103,7 @@ dedicske-konanie/
 | Modul | Účel | Kľúčové funkcie |
 |-------|------|-----------------|
 | **auth.js** | Autentifikácia a autorizácia | `hashPin()` (SHA-256), `login()`, `logout()`, session timeout (15 min), migrácia plain-text PIN-ov, permisie (`isAdmin`, `isHeir`, `canEditItems`, `canEditAllocations`) |
-| **state.js** | Dátový model a perzistencia | `state` objekt, `saveState()` / `loadState()` / `clearSavedState()`, localStorage persistence, business logika (`getTotalValue`, `getAssignedValue`, `getParticipantLimit`), `syncCashItem()`, export/import JSON |
+| **state.js** | Dátový model a perzistencia | `state` objekt, `saveState()` / `loadState()` / `clearSavedState()`, Supabase persistence + localStorage fallback, business logika (`getTotalValue`, `getAssignedValue`, `getParticipantLimit`), `syncCashItem()`, export/import JSON |
 | **ui.js** | Rendering a DOM helpery | Všetky render funkcie (`renderItems`, `renderParticipants`, `renderSummary`), modály (`showConfirmModal`, `showPinInputModal`), toasty (`showToast`), helpery (`formatEUR`, `escapeHtml`, `clamp`), tab switching, kategórie a filter |
 | **expenses.js** | Náklady | `handleCashChange`, `handleAddExpense`, `handleDeleteExpense` |
 | **app.js** | Orchestrácia a eventy | Event handlery (`handleAddItem`, `handleAllocationChange`, `handleLogin`, `handleSetup`), akcie (`addItem`, `setAllocation`, `deleteItem`), `init()`, sorting |
@@ -99,9 +112,9 @@ dedicske-konanie/
 
 1. `auth.js` a `state.js` deklarujú globálne `auth` a `state` objekty
 2. `init()` v `app.js`:
-   - `loadAuth()` — načíta PIN-y z localStorage
+   - `loadAuth()` — načíta PIN-y zo Supabase (alebo localStorage)
    - `await migrateAuthToHashed()` — prehashuje staré plain-text PIN-y
-   - `loadState()` — načíta majetok, alokácie, náklady z localStorage
+   - `loadState()` — načíta majetok, alokácie, náklady zo Supabase (alebo localStorage)
    - Bindne eventy, aplikuje farby, zavolá `renderAuthUI()`
 3. Podľa stavu autentifikácie sa zobrazí:
    - **Setup overlay** (prvý krát — PIN nie je nastavený)
@@ -110,7 +123,7 @@ dedicske-konanie/
 
 ### Dáta
 
-Všetky dáta sa ukladajú do `localStorage` v prehliadači. Žiadny server, žiadna databáza.
+Pri lokalnom fallbacku sa používa localStorage, rovnaký formát ako pôvodne:
 
 #### `dedicskeKonanie` (verzia 3)
 
@@ -132,7 +145,7 @@ Všetky dáta sa ukladajú do `localStorage` v prehliadači. Žiadny server, ži
 }
 ```
 
-#### `dedicskeKonanieAuth` (verzia 2)
+##### `dedicskeKonanieAuth` (verzia 2)
 
 ```json
 {
@@ -194,6 +207,6 @@ Aplikácia podporuje tlač cez prehliadač (Ctrl+P alebo tlačidlo v UI). Pri tl
 | HTML5 | Štruktúra |
 | CSS3 (2 486 riadkov) | Štýly, dark/light režim, print, animácie |
 | Vanilla JavaScript (2 350 riadkov) | Logika aplikácie |
-| localStorage | Perzistencia dát |
+| Supabase | Zdieľaná databáza (PostgreSQL) |
 | SHA-256 (Web Crypto API) | Hashovanie PIN-ov |
 | Node.js + jsdom | Testovanie |
