@@ -7,10 +7,11 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+const isSupabaseDisabled = () => !!globalThis.__DISABLE_SUPABASE__;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: {
-        persistSession: false,
-        autoRefreshToken: false,
+        persistSession: !isSupabaseDisabled(),
+        autoRefreshToken: !isSupabaseDisabled(),
     },
 });

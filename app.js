@@ -7,6 +7,7 @@
 
 import {
     getAuth, hashPin, saveAuth, loadAuth, clearAuth, login, logout,
+    requestEmailMagicLink,
     isAdmin, isHeir, canEditItems, canEditAllocations, canEditParticipant,
     migrateAuthToHashed, startInactivityTimer, stopInactivityTimer,
     bindActivityListeners, AUTH_VERSION,
@@ -220,6 +221,33 @@ async function handleLogin(e) {
         $('#login-pin').value = '';
         $('#login-pin').focus();
     }
+}
+
+async function handleEmailLogin(e) {
+    e.preventDefault();
+    const email = $('#login-email')?.value.trim() || '';
+    const emailError = $('#login-email-error');
+    if (!email) {
+        if (emailError) {
+            emailError.textContent = 'Zadajte email.';
+            emailError.classList.add('visible');
+        }
+        return;
+    }
+    const result = await requestEmailMagicLink(email);
+    if (!result.ok) {
+        if (emailError) {
+            emailError.textContent = result.error || 'Nepodarilo sa odoslať email.';
+            emailError.classList.add('visible');
+        }
+        return;
+    }
+    if (emailError) {
+        emailError.classList.remove('visible');
+    }
+    const emailInput = $('#login-email');
+    if (emailInput) emailInput.value = '';
+    showToast('Poslali sme prihlasovací odkaz na email.', 'success');
 }
 
 async function handleLogout(e) {
@@ -748,6 +776,7 @@ async function init() {
     // Bind auth form events
     $('#setup-form')?.addEventListener('submit', handleSetup);
     $('#login-form')?.addEventListener('submit', handleLogin);
+    $('#login-email-form')?.addEventListener('submit', handleEmailLogin);
     $('#logout-btn')?.addEventListener('click', handleLogout);
     $('#header-logout-btn')?.addEventListener('click', handleLogout);
     $('#forgot-pin-btn')?.addEventListener('click', handleForgotPin);

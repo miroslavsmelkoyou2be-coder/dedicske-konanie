@@ -14,6 +14,7 @@ import { showToast, renderAuthUI } from './ui.js';
 export const AUTH_STORAGE_KEY = 'dedicskeKonanieAuth';
 export const AUTH_VERSION = 2;
 const isSupabaseDisabled = () => !!globalThis.__DISABLE_SUPABASE__;
+const EMAIL_LOGIN_REDIRECT_PATH = '/';
 
 // Crypto helper: hash PIN using SHA-256
 export async function hashPin(pin) {
@@ -70,6 +71,80 @@ const _auth = {
 
 export function getAuth() {
     return _auth;
+}
+
+function normalizeEmail(email) {
+    return String(email || '').trim().toLowerCase();
+}
+
+async function loadEmailProfile(email) {
+    const normalized = normalizeEmail(email);
+    if (!normalized) return null;
+    const { data, error } = await supabase
+        .from('app_users')
+        .select('email, role, participant_id, is_active')
+        .eq('email', normalized)
+        .single();
+    if (error || !data || data.is_active === false) return null;
+    return data;
+}
+
+function applyEmailProfile(profile) {
+    if (!profile || !profile.role) return false;
+    if (profile.role === 'admin') {
+        _auth.currentUser = {
+            role: 'admin',
+            authType: 'email',
+            email: normalizeEmail(profile.email),
+        };
+        return true;
+    }
+    if (profile.role === 'heir' && Number.isInteger(profile.participant_id) && profile.participant_id >= 0 && profile.participant_id <= 3) {
+        _auth.currentUser = {
+            role: 'heir',
+            index: profile.participant_id,
+            authType: 'email',
+            email: normalizeEmail(profile.email),
+        };
+        return true;
+    }
+    return false;
+}
+
+export async function restoreEmailSession() {
+    if (isSupabaseDisabled()) return false;
+    try {
+        const { data: userData } = await supabase.auth.getUser();
+        const email = userData?.user?.email;
+        if (!email) return false;
+        const profile = await loadEmailProfile(email);
+        if (!profile) return false;
+        return applyEmailProfile(profile);
+    } catch (e) {
+        console.warn('Email session restore failed:', e);
+        return false;
+    }
+}
+
+export async function requestEmailMagicLink(email) {
+    if (isSupabaseDisabled()) return { ok: false, error: 'Email auth disabled in tests' };
+    const normalized = normalizeEmail(email);
+    if (!normalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
+        return { ok: false, error: 'Zadajte platný email' };
+    }
+    const profile = await loadEmailProfile(normalized);
+    if (!profile) {
+        return { ok: false, error: 'Email nie je povolený pre prístup do aplikácie.' };
+    }
+    const redirectTo = `${window.location.origin}${EMAIL_LOGIN_REDIRECT_PATH}`;
+    const { error } = await supabase.auth.signInWithOtp({
+        email: normalized,
+        options: { emailRedirectTo: redirectTo },
+    });
+    if (error) {
+        return { ok: false, error: error.message || 'Nepodarilo sa odoslať prihlasovací email.' };
+    }
+    return { ok: true };
 }
 
 export async function saveAuth(options = {}) {
@@ -164,6 +239,12 @@ export async function loadAuth() {
         // ignore
     }
 
+    // Email auth session (Supabase Auth) has priority over stale local cache
+    const hasEmailSession = await restoreEmailSession();
+    if (hasEmailSession) {
+        return true;
+    }
+
     return supabaseHadData || !!_auth.adminPin;
 }
 
@@ -229,6 +310,13 @@ export async function login(pin, rememberMe = true) {
 
 export async function logout() {
     stopInactivityTimer();
+    if (_auth.currentUser?.authType === 'email' && !isSupabaseDisabled()) {
+        try {
+            await supabase.auth.signOut();
+        } catch (e) {
+            console.warn('Supabase signOut failed:', e);
+        }
+    }
     _auth.currentUser = null;
     await saveAuth();
     renderAuthUI();

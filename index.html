@@ -63,6 +63,15 @@
                 <div class="auth-icon">🔐</div>
                 <h2>Prihlásenie</h2>
                 <p class="auth-desc">Zadajte svoj PIN pre prístup k aplikácii.</p>
+                <form id="login-email-form" class="auth-form" style="margin-bottom: 0.75rem;">
+                    <div class="auth-field">
+                        <label for="login-email">Email (magic link)</label>
+                        <input type="email" id="login-email" placeholder="vas@email.sk" autocomplete="email" />
+                    </div>
+                    <div class="auth-error" id="login-email-error" aria-live="polite"></div>
+                    <button type="submit" class="btn btn-secondary auth-submit">Poslať prihlasovací odkaz</button>
+                </form>
+                <p class="auth-desc small">Alebo sa prihláste PIN-om:</p>
                 <form id="login-form" class="auth-form">
                     <div class="auth-field">
                         <label for="login-pin">Váš PIN</label>

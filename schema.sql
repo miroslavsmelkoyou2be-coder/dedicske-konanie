@@ -20,6 +20,22 @@ CREATE TABLE IF NOT EXISTS pins (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 3. Email users / roles mapping
+CREATE TABLE IF NOT EXISTS app_users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT UNIQUE NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('admin', 'heir')),
+    participant_id INTEGER,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT app_users_participant_check
+        CHECK (
+            (role = 'admin' AND participant_id IS NULL) OR
+            (role = 'heir' AND participant_id BETWEEN 0 AND 3)
+        )
+);
+
 -- Vložíme prázdny riadok pre app_data
 INSERT INTO app_data (id, data)
 VALUES (1, '{}'::jsonb)
@@ -33,3 +49,4 @@ ON CONFLICT (id) DO NOTHING;
 -- Vypneme Row Level Security (pre rodinnú aplikáciu postačuje)
 ALTER TABLE app_data DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pins DISABLE ROW LEVEL SECURITY;
+ALTER TABLE app_users DISABLE ROW LEVEL SECURITY;
