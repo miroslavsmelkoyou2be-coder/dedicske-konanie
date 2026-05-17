@@ -7,6 +7,9 @@
 
 import { supabase } from './supabase.js';
 
+const isSupabaseDisabled = () => !!globalThis.__DISABLE_SUPABASE__;
+
+
 // ==============================
 // Constants
 // ==============================
@@ -187,19 +190,21 @@ function deserializeState(data) {
 export async function saveState() {
     const serialized = serializeState();
 
-    // Save to Supabase
-    try {
-        const { error } = await supabase
-            .from('app_data')
-            .upsert(
-                { id: 1, data: serialized, updated_at: new Date().toISOString() },
-                { onConflict: 'id' }
-            );
-        if (error) {
-            console.warn('Supabase save error:', error);
+    // Save to Supabase (disabled in tests)
+    if (!isSupabaseDisabled()) {
+        try {
+            const { error } = await supabase
+                .from('app_data')
+                .upsert(
+                    { id: 1, data: serialized, updated_at: new Date().toISOString() },
+                    { onConflict: 'id' }
+                );
+            if (error) {
+                console.warn('Supabase save error:', error);
+            }
+        } catch (e) {
+            console.warn('Supabase save failed, using localStorage fallback:', e);
         }
-    } catch (e) {
-        console.warn('Supabase save failed, using localStorage fallback:', e);
     }
 
     // Also save to localStorage as cache/fallback
@@ -211,8 +216,9 @@ export async function saveState() {
 }
 
 export async function loadState() {
-    // Try Supabase first
-    try {
+    // Try Supabase first (disabled in tests)
+    if (!isSupabaseDisabled()) {
+        try {
         const { data, error } = await supabase
             .from('app_data')
             .select('data')
@@ -226,8 +232,9 @@ export async function loadState() {
                 return true;
             }
         }
-    } catch (e) {
-        console.warn('Supabase load failed, trying localStorage:', e);
+        } catch (e) {
+            console.warn('Supabase load failed, trying localStorage:', e);
+        }
     }
 
     // Fallback to localStorage
@@ -252,16 +259,18 @@ function fallbackLoadState() {
 }
 
 export async function clearSavedState() {
-    // Clear Supabase
-    try {
+    // Clear Supabase (disabled in tests)
+    if (!isSupabaseDisabled()) {
+        try {
         await supabase
             .from('app_data')
             .upsert(
                 { id: 1, data: {}, updated_at: new Date().toISOString() },
                 { onConflict: 'id' }
             );
-    } catch (e) {
-        console.warn('Supabase clear failed:', e);
+        } catch (e) {
+            console.warn('Supabase clear failed:', e);
+        }
     }
 
     // Clear localStorage

@@ -34,6 +34,8 @@ export function setupJsdom() {
     globalThis.HTMLInputElement = dom.window.HTMLInputElement;
     globalThis.Blob = dom.window.Blob;
     globalThis.URL = dom.window.URL;
+    // Force production modules to skip Supabase in unit tests.
+    globalThis.__DISABLE_SUPABASE__ = true;
     // navigator, console, and some others are read-only in Node.js — skip them;
 
     // Mock crypto.subtle.digest for Node.js (crypto.subtle is a read-only getter)

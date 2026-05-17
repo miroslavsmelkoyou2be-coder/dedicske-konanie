@@ -13,6 +13,7 @@ import { showToast, renderAuthUI } from './ui.js';
 // ==============================
 export const AUTH_STORAGE_KEY = 'dedicskeKonanieAuth';
 export const AUTH_VERSION = 2;
+const isSupabaseDisabled = () => !!globalThis.__DISABLE_SUPABASE__;
 
 // Crypto helper: hash PIN using SHA-256
 export async function hashPin(pin) {
@@ -79,19 +80,21 @@ export async function saveAuth(options = {}) {
         auth_version: _auth.authVersion || AUTH_VERSION,
     };
 
-    // Save to Supabase
-    try {
-        const { error } = await supabase
-            .from('pins')
-            .upsert(
-                { id: 1, ...payload, updated_at: new Date().toISOString() },
-                { onConflict: 'id' }
-            );
-        if (error) {
-            console.warn('Supabase pins save error:', error);
+    // Save to Supabase (disabled in tests)
+    if (!isSupabaseDisabled()) {
+        try {
+            const { error } = await supabase
+                .from('pins')
+                .upsert(
+                    { id: 1, ...payload, updated_at: new Date().toISOString() },
+                    { onConflict: 'id' }
+                );
+            if (error) {
+                console.warn('Supabase pins save error:', error);
+            }
+        } catch (e) {
+            console.warn('Supabase pins save failed, using localStorage fallback:', e);
         }
-    } catch (e) {
-        console.warn('Supabase pins save failed, using localStorage fallback:', e);
     }
 
     // Also save session to localStorage (browser-specific session)
@@ -113,27 +116,29 @@ export async function saveAuth(options = {}) {
 export async function loadAuth() {
     let supabaseHadData = false;
 
-    // Try Supabase first
-    try {
-        const { data, error } = await supabase
-            .from('pins')
-            .select('admin_pin, heir_pins, auth_version')
-            .eq('id', 1)
-            .single();
+    // Try Supabase first (disabled in tests)
+    if (!isSupabaseDisabled()) {
+        try {
+            const { data, error } = await supabase
+                .from('pins')
+                .select('admin_pin, heir_pins, auth_version')
+                .eq('id', 1)
+                .single();
 
-        if (!error && data) {
-            supabaseHadData = true;
-            if (data.admin_pin) _auth.adminPin = data.admin_pin;
-            if (Array.isArray(data.heir_pins) && data.heir_pins.length === 4) {
-                _auth.heirPins = data.heir_pins;
+            if (!error && data) {
+                supabaseHadData = true;
+                if (data.admin_pin) _auth.adminPin = data.admin_pin;
+                if (Array.isArray(data.heir_pins) && data.heir_pins.length === 4) {
+                    _auth.heirPins = data.heir_pins;
+                }
+                if (typeof data.auth_version === 'number') {
+                    _auth.authVersion = data.auth_version;
+                }
+                console.log('PIN-y načítané zo Supabase');
             }
-            if (typeof data.auth_version === 'number') {
-                _auth.authVersion = data.auth_version;
-            }
-            console.log('PIN-y načítané zo Supabase');
+        } catch (e) {
+            console.warn('Supabase auth load failed, trying localStorage:', e);
         }
-    } catch (e) {
-        console.warn('Supabase auth load failed, trying localStorage:', e);
     }
 
     // Fallback to localStorage (only if Supabase didn't have data)
@@ -165,22 +170,24 @@ export async function loadAuth() {
 export async function clearAuth() {
     stopInactivityTimer();
 
-    // Clear Supabase pins
-    try {
-        await supabase
-            .from('pins')
-            .upsert(
-                {
-                    id: 1,
-                    admin_pin: '',
-                    heir_pins: ['', '', '', ''],
-                    auth_version: AUTH_VERSION,
-                    updated_at: new Date().toISOString(),
-                },
-                { onConflict: 'id' }
-            );
-    } catch (e) {
-        console.warn('Supabase pins clear failed:', e);
+    // Clear Supabase pins (disabled in tests)
+    if (!isSupabaseDisabled()) {
+        try {
+            await supabase
+                .from('pins')
+                .upsert(
+                    {
+                        id: 1,
+                        admin_pin: '',
+                        heir_pins: ['', '', '', ''],
+                        auth_version: AUTH_VERSION,
+                        updated_at: new Date().toISOString(),
+                    },
+                    { onConflict: 'id' }
+                );
+        } catch (e) {
+            console.warn('Supabase pins clear failed:', e);
+        }
     }
 
     // Clear localStorage
