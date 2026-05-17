@@ -36,11 +36,17 @@ import {
 import {
     handleCashChange, handleAddExpense, handleDeleteExpense,
 } from './expenses.js';
+import { supabase } from './supabase.js';
 
 const auth = getAuth();
 const state = getState();
 const OTP_RESEND_COOLDOWN_SEC = 60;
 let otpCooldownTimer = null;
+const emailUsersState = {
+    loaded: false,
+    admin: { email: '', isActive: true },
+    heirs: Array.from({ length: 4 }, () => ({ email: '', isActive: true })),
+};
 
 function stopOtpCooldown() {
     if (otpCooldownTimer) {
@@ -66,6 +72,114 @@ function startOtpCooldown(seconds = OTP_RESEND_COOLDOWN_SEC) {
         }
         sendBtn.textContent = `Poslať nový kód (${remaining}s)`;
     }, 1000);
+}
+
+function normalizeEmail(email) {
+    return String(email || '').trim().toLowerCase();
+}
+
+async function loadEmailUsersState() {
+    try {
+        const { data, error } = await supabase
+            .from('app_users')
+            .select('email, role, participant_id, is_active');
+        if (error) throw error;
+        emailUsersState.admin = { email: '', isActive: true };
+        emailUsersState.heirs = Array.from({ length: 4 }, () => ({ email: '', isActive: true }));
+        (data || []).forEach((row) => {
+            if (row.role === 'admin') {
+                emailUsersState.admin = { email: row.email || '', isActive: row.is_active !== false };
+            } else if (row.role === 'heir' && Number.isInteger(row.participant_id) && row.participant_id >= 0 && row.participant_id <= 3) {
+                emailUsersState.heirs[row.participant_id] = { email: row.email || '', isActive: row.is_active !== false };
+            }
+        });
+        emailUsersState.loaded = true;
+        return true;
+    } catch (e) {
+        showToast('Nepodarilo sa načítať email prístupy.', 'error');
+        return false;
+    }
+}
+
+function renderEmailUsersManagement() {
+    const grid = $('#email-users-grid');
+    if (!grid || !isAdmin()) return;
+    const labels = ['Administrátor', ...state.participants.map((p) => p.name)];
+
+    const rows = [];
+    rows.push(`
+        <div class="pin-row">
+            <span class="pin-row-label">${labels[0]}</span>
+            <span class="pin-row-email-input-wrap">
+                <input type="email" class="pin-row-email-input" data-role="admin" value="${escapeHtml(emailUsersState.admin.email)}" placeholder="admin@domena.sk" />
+            </span>
+            <span class="pin-row-actions">
+                <label class="pin-row-active"><input type="checkbox" data-role-active="admin" ${emailUsersState.admin.isActive ? 'checked' : ''} /> Aktívny</label>
+            </span>
+        </div>
+    `);
+
+    for (let i = 0; i < 4; i++) {
+        const entry = emailUsersState.heirs[i];
+        rows.push(`
+            <div class="pin-row">
+                <span class="pin-row-label" style="--dot-color: ${getPColor(i)};">${labels[i + 1]}</span>
+                <span class="pin-row-email-input-wrap">
+                    <input type="email" class="pin-row-email-input" data-role="heir" data-participant-id="${i}" value="${escapeHtml(entry.email)}" placeholder="dedic@domena.sk" />
+                </span>
+                <span class="pin-row-actions">
+                    <label class="pin-row-active"><input type="checkbox" data-role-active="heir" data-participant-id="${i}" ${entry.isActive ? 'checked' : ''} /> Aktívny</label>
+                </span>
+            </div>
+        `);
+    }
+    grid.innerHTML = rows.join('');
+}
+
+async function saveEmailUsersManagement() {
+    if (!isAdmin()) return;
+    const adminEmail = normalizeEmail($('.pin-row-email-input[data-role="admin"]')?.value || '');
+    const adminActive = !!$('[data-role-active="admin"]')?.checked;
+    if (!adminEmail) {
+        showToast('Zadajte email administrátora.', 'error');
+        return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
+        showToast('Email administrátora má neplatný formát.', 'error');
+        return;
+    }
+
+    const seen = new Set([adminEmail]);
+    const rows = [
+        { email: adminEmail, role: 'admin', participant_id: null, is_active: adminActive },
+    ];
+
+    for (let i = 0; i < 4; i++) {
+        const email = normalizeEmail($(`.pin-row-email-input[data-role="heir"][data-participant-id="${i}"]`)?.value || '');
+        const isActive = !!$(`[data-role-active="heir"][data-participant-id="${i}"]`)?.checked;
+        if (!email) continue;
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            showToast(`Email pre ${state.participants[i].name} má neplatný formát.`, 'error');
+            return;
+        }
+        if (seen.has(email)) {
+            showToast('Každý email musí byť jedinečný.', 'error');
+            return;
+        }
+        seen.add(email);
+        rows.push({ email, role: 'heir', participant_id: i, is_active: isActive });
+    }
+
+    try {
+        await supabase.from('app_users').delete().neq('email', '');
+        const { error } = await supabase.from('app_users').insert(rows);
+        if (error) throw error;
+        await loadEmailUsersState();
+        renderEmailUsersManagement();
+        showToast('Email prístupy boli uložené.', 'success');
+    } catch (e) {
+        showToast('Uloženie email prístupov zlyhalo.', 'error');
+    }
 }
 
 // ==============================
@@ -839,6 +953,7 @@ async function init() {
     await migrateAuthToHashed();
 
     await loadState();
+    await loadEmailUsersState();
 
     // Bind auth form events
     $('#setup-form')?.addEventListener('submit', handleSetup);
@@ -873,6 +988,9 @@ async function init() {
         btn.addEventListener('click', (e) => {
             const tab = e.currentTarget.dataset.tab;
             switchAdminTab(tab);
+            if (tab === 'pins') {
+                renderEmailUsersManagement();
+            }
         });
     });
 
@@ -920,6 +1038,9 @@ async function init() {
     // Re-apply role visibility after renderAll (ensures correct admin tab sections)
     if (auth.currentUser) {
         applyRoleVisibility();
+        if (isAdmin() && uiState.adminTab === 'pins') {
+            renderEmailUsersManagement();
+        }
     }
 
     // === Delegated events ===
@@ -961,6 +1082,11 @@ async function init() {
             if (removeBtn) handleRemovePin(removeBtn);
         });
     }
+
+    document.querySelector('#save-email-users-btn')?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await saveEmailUsersManagement();
+    });
 
     // Participant tag removal (delegated via participants-grid)
     document.querySelector('#participants-grid').addEventListener('click', async (e) => {
