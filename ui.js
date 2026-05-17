@@ -4,7 +4,7 @@
  * DOM helpers, modals, toasts, and all rendering functions.
  */
 
-import { getAuth, isAdmin, canEditItems, canEditAllocations, canEditParticipant, hasEmailAuthConfigured } from './auth.js';
+import { getAuth, isAdmin, canEditItems, canEditAllocations, canEditParticipant } from './auth.js';
 import {
     getState, getPColor, getTotalValue, getAssignedValue, getAssignedTotal,
     getUnassignedTotal, getItemAllocatedPct, getPrimaryParticipant,
@@ -165,72 +165,6 @@ export function showConfirmModal({ title, message, confirmText, onConfirm }) {
 }
 
 // ==============================
-// PIN Input Modal
-// ==============================
-export function showPinInputModal({ title, message, initialValue, onSubmit }) {
-    const modal = document.querySelector('#pin-modal');
-    const titleEl = document.querySelector('#pin-modal-title');
-    const messageEl = document.querySelector('#pin-modal-message');
-    const inputEl = document.querySelector('#pin-modal-input');
-    const saveBtn = document.querySelector('#pin-modal-save-btn');
-    const cancelBtn = document.querySelector('#pin-modal-cancel-btn');
-    const closeBtn = document.querySelector('#pin-modal-close');
-
-    if (!modal || !inputEl || !saveBtn || !cancelBtn || !closeBtn) return;
-    if (modal.classList.contains('open')) return;
-
-    titleEl.textContent = title || 'Zmena PIN-u';
-    messageEl.textContent = message || 'Zadajte novy PIN.';
-    inputEl.value = initialValue || '';
-
-    function closeModal() {
-        modal.classList.remove('open');
-        modal.setAttribute('aria-hidden', 'true');
-        saveBtn.removeEventListener('click', handleSave);
-        cancelBtn.removeEventListener('click', closeModal);
-        closeBtn.removeEventListener('click', closeModal);
-        document.removeEventListener('keydown', handleKeydown);
-        modal.removeEventListener('click', handleOverlayClick);
-        inputEl.removeEventListener('keydown', handleInputKeydown);
-    }
-
-    async function handleSave() {
-        const value = inputEl.value.trim();
-        if (typeof onSubmit === 'function') {
-            const shouldClose = await onSubmit(value);
-            if (shouldClose === false) return;
-        }
-        closeModal();
-    }
-
-    function handleInputKeydown(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            handleSave();
-        }
-    }
-
-    function handleKeydown(e) {
-        if (e.key === 'Escape') closeModal();
-    }
-
-    function handleOverlayClick(e) {
-        if (e.target === modal) closeModal();
-    }
-
-    saveBtn.addEventListener('click', handleSave);
-    cancelBtn.addEventListener('click', closeModal);
-    closeBtn.addEventListener('click', closeModal);
-    document.addEventListener('keydown', handleKeydown);
-    modal.addEventListener('click', handleOverlayClick);
-    inputEl.addEventListener('keydown', handleInputKeydown);
-
-    modal.classList.add('open');
-    modal.setAttribute('aria-hidden', 'false');
-    setTimeout(() => inputEl.focus(), 50);
-}
-
-// ==============================
 // Auth UI
 // ==============================
 export function renderAuthUI() {
@@ -341,7 +275,7 @@ export function applyRoleVisibility() {
                     if (expenseFormNak) expenseFormNak.style.display = '';
                     show(expensesSection);
                     break;
-                case 'pins':
+                case 'access':
                     show(pinsSection);
                     break;
             }
@@ -400,8 +334,7 @@ export function switchAdminTab(tab) {
             renderCashSection();
             renderExpensesSection();
             break;
-        case 'pins':
-            renderPinsManagement();
+        case 'access':
             break;
     }
 }
@@ -429,33 +362,6 @@ export function switchHeirTab(tab) {
     }
 }
 
-export function renderPinsManagement() {
-    const grid = $('#pins-grid');
-    if (!grid) return;
-
-    const labels = ['Administrátor', ...getState().participants.map(p => p.name)];
-    const pins = [getAuth().adminPin, ...getAuth().heirPins];
-
-    let html = '';
-    pins.forEach((pin, i) => {
-        const isSet = !!pin;
-        const isAdminLabel = i === 0;
-        const labelClass = isAdminLabel ? '' : `style="--dot-color: ${getPColor(i - 1)};"`;
-
-        html += `
-            <div class="pin-row" data-pin-index="${i}">
-                <span class="pin-row-label" ${labelClass}>${labels[i]}</span>
-                <span class="pin-row-value ${isSet ? '' : 'unset'}">${isSet ? '•'.repeat(pin.length) : 'Nenastavený'}</span>
-                <span class="pin-row-actions">
-                    <button class="btn-pin-set" data-action="change-pin" data-index="${i}">Zmeniť</button>
-                    ${isAdminLabel ? '' : `<button class="btn-pin-remove" data-action="remove-pin" data-index="${i}" ${isSet ? '' : 'disabled'}>Zrušiť</button>`}
-                </span>
-            </div>
-        `;
-    });
-
-    grid.innerHTML = html;
-}
 
 // ==============================
 // Rendering

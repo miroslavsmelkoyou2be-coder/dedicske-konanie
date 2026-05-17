@@ -6,11 +6,10 @@
  */
 
 import {
-    getAuth, hashPin, saveAuth, loadAuth, clearAuth, login, logout,
+    getAuth, loadAuth, logout,
     requestEmailMagicLink, verifyEmailOtp,
     isAdmin, isHeir, canEditItems, canEditAllocations, canEditParticipant,
-    migrateAuthToHashed, startInactivityTimer, stopInactivityTimer,
-    bindActivityListeners, AUTH_VERSION,
+    bindActivityListeners,
 } from './auth.js';
 import {
     getState, saveState, loadState, clearSavedState,
@@ -27,10 +26,10 @@ import {
     $, $$, form, itemNameInput, itemValueInput, itemCategoryInput,
     itemsList, exportBtn, importInput,
     formatEUR, parseEUR, escapeHtml, clamp,
-    showToast, showConfirmModal, showPinInputModal,
+    showToast, showConfirmModal,
     renderAuthUI, applyRoleVisibility,
     switchAdminTab, switchHeirTab,
-    renderPinsManagement, renderAll, renderItems, renderCashSection,
+    renderAll, renderItems, renderCashSection,
     renderExpensesSection, renderParticipants, renderCategoryFilter,
 } from './ui.js';
 import {
@@ -323,165 +322,6 @@ function handleSortDirToggle(e) {
 // ==============================
 // Auth Event Handlers
 // ==============================
-async function handleChangePin(e) {
-    const btn = e.currentTarget;
-    const index = parseInt(btn.dataset.index);
-    const isAdminLabel = index === 0;
-    const label = isAdminLabel ? 'Administratorsky PIN' : `PIN pre ${state.participants[index - 1]?.name || 'dedica'}`;
-    const currentPin = isAdminLabel ? auth.adminPin : auth.heirPins[index - 1];
-
-    showPinInputModal({
-        title: `Zmenit ${label}`,
-        message: `Zadajte novy ${label} (max 6 cislic).${isAdminLabel ? '' : '\\nNechajte prazdne pre zrusenie PIN-u.'}`,
-        initialValue: currentPin || '',
-        onSubmit: async (trimmed) => {
-            if (!trimmed) {
-                if (!isAdminLabel) {
-                    auth.heirPins[index - 1] = '';
-                    await saveAuth();
-                    renderPinsManagement();
-                    showToast(`PIN pre ${state.participants[index - 1].name} bol zruseny`, 'success');
-                }
-                return true;
-            }
-
-            if (!/^[0-9]{1,6}$/.test(trimmed)) {
-                showToast('PIN musi obsahovat iba cislice (max 6)', 'error');
-                return false;
-            }
-
-            const hashed = await hashPin(trimmed);
-
-            if (isAdminLabel) {
-                if (auth.heirPins.includes(hashed)) {
-                    showToast('Tento PIN uz pouziva jeden z dedicov', 'error');
-                    return false;
-                }
-            } else if (hashed === auth.adminPin || auth.heirPins.some((p, j) => j !== index - 1 && p === hashed)) {
-                showToast('Tento PIN uz pouziva niekto iny', 'error');
-                return false;
-            }
-
-            if (isAdminLabel) {
-                auth.adminPin = hashed;
-            } else {
-                auth.heirPins[index - 1] = hashed;
-            }
-            auth.authVersion = AUTH_VERSION;
-
-            await saveAuth();
-            renderPinsManagement();
-            showToast(`${label} bol zmeneny`, 'success');
-            return true;
-        },
-    });
-}
-
-function handleRemovePin(e) {
-    const btn = e.currentTarget;
-    const index = parseInt(btn.dataset.index);
-    if (index === 0) return; // cannot remove admin PIN
-
-    const name = state.participants[index - 1]?.name || 'Dedič';
-
-    showConfirmModal({
-        title: 'Zrušiť PIN',
-        message: `Naozaj chcete zrušiť PIN pre ${name}? Dedič sa potom nebude môcť prihlásiť.`,
-        confirmText: 'Zrušiť PIN',
-        onConfirm: async () => {
-            auth.heirPins[index - 1] = '';
-            await saveAuth();
-            renderPinsManagement();
-            showToast(`PIN pre ${name} bol zrušený`, 'success');
-        },
-    });
-}
-
-async function handleSetup(e) {
-    e.preventDefault();
-    const adminPinRaw = $('#setup-admin-pin').value.trim();
-    const setupError = $('#setup-error');
-
-    if (!adminPinRaw) {
-        setupError.textContent = 'Zadajte administrátorský PIN';
-        setupError.classList.add('visible');
-        return;
-    }
-
-    if (!/^[0-9]{1,6}$/.test(adminPinRaw)) {
-        setupError.textContent = 'PIN musí obsahovať iba číslice (max 6)';
-        setupError.classList.add('visible');
-        return;
-    }
-
-    setupError.classList.remove('visible');
-
-    auth.adminPin = await hashPin(adminPinRaw);
-    auth.authVersion = AUTH_VERSION;
-
-    // Collect heir PINs
-    for (let i = 0; i < 4; i++) {
-        const input = document.querySelector(`#setup-heir-${i}`);
-        if (input) {
-            const val = input.value.trim();
-            if (val && /^[0-9]{1,6}$/.test(val)) {
-                if (val === adminPinRaw) {
-                    showToast(`PIN pre ${state.participants[i].name} už používa niekto iný`, 'warning');
-                    continue;
-                }
-                let duplicate = false;
-                for (let j = 0; j < i; j++) {
-                    const prevInput = document.querySelector(`#setup-heir-${j}`);
-                    if (prevInput && prevInput.value.trim() === val) {
-                        showToast(`PIN pre ${state.participants[i].name} už používa niekto iný`, 'warning');
-                        duplicate = true;
-                        break;
-                    }
-                }
-                if (duplicate) continue;
-                auth.heirPins[i] = await hashPin(val);
-            } else {
-                auth.heirPins[i] = '';
-            }
-        }
-    }
-
-    // Auto-login as admin (save after currentUser for remember-me)
-    auth.currentUser = { role: 'admin' };
-    await saveAuth();
-    startInactivityTimer();
-    renderAuthUI();
-    renderAll();
-    showToast('PIN-y boli uložené. Ste prihlásený ako administrátor.', 'success');
-}
-
-async function handleLogin(e) {
-    e.preventDefault();
-    const pin = $('#login-pin').value.trim();
-    const loginError = $('#login-error');
-    const rememberMe = $('#login-remember')?.checked ?? true;
-
-    if (!pin) {
-        loginError.textContent = 'Zadajte PIN';
-        loginError.classList.add('visible');
-        return;
-    }
-
-    if (await login(pin, rememberMe)) {
-        loginError.classList.remove('visible');
-        $('#login-pin').value = '';
-        renderAuthUI();
-        renderAll();
-
-        const role = isAdmin() ? 'ako administrátor' : `ako ${state.participants[auth.currentUser.index].name}`;
-        showToast(`Prihlásený ${role}`, 'success');
-    } else {
-        loginError.textContent = 'Nesprávny PIN. Skúste to znova.';
-        loginError.classList.add('visible');
-        $('#login-pin').value = '';
-        $('#login-pin').focus();
-    }
-}
 
 async function handleEmailLogin(e) {
     e.preventDefault();
@@ -555,22 +395,6 @@ async function handleLogout(e) {
     showToast('Odhlásený', 'success');
 }
 
-function handleForgotPin(e) {
-    if (e) e.preventDefault();
-    showConfirmModal({
-        title: 'Zabudnutý PIN',
-        message: 'Naozaj chcete vymazať všetky PIN-y? Po potvrdení sa zobrazí úvodné nastavenie, kde si nastavíte nové PIN-y.\\n\\nDáta o majetku a alokáciách ostanú zachované.',
-        confirmText: 'Vymazať PIN-y',
-        onConfirm: async () => {
-            await clearAuth();
-            renderAuthUI();
-            if (auth.adminPin) {
-                renderPinsManagement();
-            }
-            showToast('PIN-y boli vymazané. Nastavte nové.', 'success');
-        },
-    });
-}
 
 // ==============================
 // Actions
@@ -1101,7 +925,7 @@ async function init() {
         btn.addEventListener('click', (e) => {
             const tab = e.currentTarget.dataset.tab;
             switchAdminTab(tab);
-            if (tab === 'pins') {
+            if (tab === 'access') {
                 renderEmailUsersManagement();
             }
         });
@@ -1151,7 +975,7 @@ async function init() {
     // Re-apply role visibility after renderAll (ensures correct admin tab sections)
     if (auth.currentUser) {
         applyRoleVisibility();
-        if (isAdmin() && uiState.adminTab === 'pins') {
+        if (isAdmin() && uiState.adminTab === 'access') {
             renderEmailUsersManagement();
         }
     }

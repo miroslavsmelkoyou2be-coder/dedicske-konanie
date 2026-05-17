@@ -1,39 +1,25 @@
 /**
- * Dedičské konanie – Auth Module (ES Module)
- *
- * PIN hashing, session management, login/logout, permission helpers.
- * PIN hashes are stored in Supabase (shared across browsers).
+ * Dediccke konanie - Auth Module (email OTP only)
  */
 
 import { supabase } from './supabase.js';
 import { showToast, renderAuthUI } from './ui.js';
 
-// ==============================
-// Auth Constants
-// ==============================
 export const AUTH_STORAGE_KEY = 'dedicskeKonanieAuth';
-export const AUTH_VERSION = 2;
 const isSupabaseDisabled = () => !!globalThis.__DISABLE_SUPABASE__;
-const ENABLE_LEGACY_PINS = false;
 
-// Crypto helper: hash PIN using SHA-256
-export async function hashPin(pin) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(pin);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-// Session timeout: auto-logout after 15 minutes of inactivity
-const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
-
+const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
 let inactivityTimer = null;
 const ACTIVITY_EVENTS = ['mousedown', 'mousemove', 'keydown', 'click', 'scroll', 'touchstart', 'wheel'];
 
+const _auth = {
+    currentUser: null, // null | { role: 'admin' } | { role: 'heir', index: 0-3 }
+    emailAuthAvailable: false,
+};
+
 function sessionExpired() {
     if (getAuth().currentUser) {
-        showToast('Session vypršala – budete odhlásený pre nečinnosť.', 'warning');
+        showToast('Session vyprsala - budete odhlaseny pre necinnost.', 'warning');
         logout();
     }
 }
@@ -44,9 +30,7 @@ export function startInactivityTimer() {
 }
 
 export function resetInactivityTimer() {
-    if (inactivityTimer !== null) {
-        startInactivityTimer();
-    }
+    if (inactivityTimer !== null) startInactivityTimer();
 }
 
 export function stopInactivityTimer() {
@@ -57,18 +41,10 @@ export function stopInactivityTimer() {
 }
 
 export function bindActivityListeners() {
-    ACTIVITY_EVENTS.forEach(event => {
+    ACTIVITY_EVENTS.forEach((event) => {
         document.addEventListener(event, resetInactivityTimer, { passive: true });
     });
 }
-
-const _auth = {
-    adminPin: '',
-    heirPins: ['', '', '', ''],
-    currentUser: null,  // null | { role: 'admin' } | { role: 'heir', index: 0-3 }
-    authVersion: AUTH_VERSION,
-    emailAuthAvailable: false,
-};
 
 export function getAuth() {
     return _auth;
@@ -97,11 +73,7 @@ async function loadEmailProfile(email) {
 function applyEmailProfile(profile) {
     if (!profile || !profile.role) return false;
     if (profile.role === 'admin') {
-        _auth.currentUser = {
-            role: 'admin',
-            authType: 'email',
-            email: normalizeEmail(profile.email),
-        };
+        _auth.currentUser = { role: 'admin', authType: 'email', email: normalizeEmail(profile.email) };
         return true;
     }
     if (profile.role === 'heir' && Number.isInteger(profile.participant_id) && profile.participant_id >= 0 && profile.participant_id <= 3) {
@@ -135,7 +107,7 @@ export async function requestEmailMagicLink(email) {
     if (isSupabaseDisabled()) return { ok: false, error: 'Email auth disabled in tests' };
     const normalized = normalizeEmail(email);
     if (!normalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
-        return { ok: false, error: 'Zadajte platný email' };
+        return { ok: false, error: 'Zadajte platny email' };
     }
     try {
         const response = await fetch('/api/auth/send-otp', {
@@ -145,10 +117,10 @@ export async function requestEmailMagicLink(email) {
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-            return { ok: false, error: payload.error || 'Nepodarilo sa odoslať prihlasovací email.' };
+            return { ok: false, error: payload.error || 'Nepodarilo sa odoslat prihlasovaci email.' };
         }
     } catch (e) {
-        return { ok: false, error: 'Nepodarilo sa kontaktovať prihlasovací server.' };
+        return { ok: false, error: 'Nepodarilo sa kontaktovat prihlasovaci server.' };
     }
     return { ok: true };
 }
@@ -158,7 +130,7 @@ export async function verifyEmailOtp(email, code) {
     const normalized = normalizeEmail(email);
     const otp = String(code || '').trim();
     if (!normalized || !otp) {
-        return { ok: false, error: 'Zadajte email a overovací kód.' };
+        return { ok: false, error: 'Zadajte email a overovaci kod.' };
     }
     try {
         const response = await fetch('/api/auth/verify-otp', {
@@ -168,7 +140,7 @@ export async function verifyEmailOtp(email, code) {
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
-            return { ok: false, error: payload.error || 'Overenie kódu zlyhalo.' };
+            return { ok: false, error: payload.error || 'Overenie kodu zlyhalo.' };
         }
 
         if (payload.role === 'admin') {
@@ -176,47 +148,20 @@ export async function verifyEmailOtp(email, code) {
         } else if (payload.role === 'heir' && Number.isInteger(payload.participantId)) {
             _auth.currentUser = { role: 'heir', index: payload.participantId, authType: 'email_otp', email: normalized };
         } else {
-            return { ok: false, error: 'Neplatný profil používateľa.' };
+            return { ok: false, error: 'Neplatny profil pouzivatela.' };
         }
         await saveAuth({ persistSession: true });
         startInactivityTimer();
         return { ok: true };
     } catch (e) {
-        return { ok: false, error: 'Nepodarilo sa kontaktovať overovací server.' };
+        return { ok: false, error: 'Nepodarilo sa kontaktovat overovaci server.' };
     }
 }
 
 export async function saveAuth(options = {}) {
     const { persistSession = true } = options;
-    // Legacy PIN persistence is disabled in email-only mode.
-    if (ENABLE_LEGACY_PINS && !isSupabaseDisabled()) {
-        const payload = {
-            admin_pin: _auth.adminPin,
-            heir_pins: _auth.heirPins,
-            auth_version: _auth.authVersion || AUTH_VERSION,
-        };
-        try {
-            const { error } = await supabase
-                .from('pins')
-                .upsert(
-                    { id: 1, ...payload, updated_at: new Date().toISOString() },
-                    { onConflict: 'id' }
-                );
-            if (error) {
-                console.warn('Supabase pins save error:', error);
-            }
-        } catch (e) {
-            console.warn('Supabase pins save failed, using localStorage fallback:', e);
-        }
-    }
-
-    // Also save session to localStorage (browser-specific session)
     try {
-        const sessionData = {
-            adminPin: _auth.adminPin,
-            heirPins: _auth.heirPins,
-            authVersion: _auth.authVersion || AUTH_VERSION,
-        };
+        const sessionData = {};
         if (persistSession && _auth.currentUser) {
             sessionData.currentUser = _auth.currentUser;
         }
@@ -227,58 +172,17 @@ export async function saveAuth(options = {}) {
 }
 
 export async function loadAuth() {
-    let supabaseHadData = false;
     _auth.emailAuthAvailable = false;
-
-    // Legacy PIN load is disabled in email-only mode.
-    if (ENABLE_LEGACY_PINS && !isSupabaseDisabled()) {
-        try {
-            const { data, error } = await supabase
-                .from('pins')
-                .select('admin_pin, heir_pins, auth_version')
-                .eq('id', 1)
-                .single();
-
-            if (!error && data) {
-                supabaseHadData = true;
-                if (data.admin_pin) _auth.adminPin = data.admin_pin;
-                if (Array.isArray(data.heir_pins) && data.heir_pins.length === 4) {
-                    _auth.heirPins = data.heir_pins;
-                }
-                if (typeof data.auth_version === 'number') {
-                    _auth.authVersion = data.auth_version;
-                }
-                console.log('PIN-y načítané zo Supabase');
-            }
-        } catch (e) {
-            console.warn('Supabase auth load failed, trying localStorage:', e);
-        }
-    }
-
-    // Fallback to localStorage (only if Supabase didn't have data)
-    // Always restore currentUser from localStorage (browser-specific session)
     try {
         const raw = localStorage.getItem(AUTH_STORAGE_KEY);
         if (raw) {
             const data = JSON.parse(raw);
-            if (!supabaseHadData) {
-                if (data.adminPin) _auth.adminPin = data.adminPin;
-                if (Array.isArray(data.heirPins) && data.heirPins.length === 4) {
-                    _auth.heirPins = data.heirPins;
-                }
-                if (data.authVersion) _auth.authVersion = data.authVersion;
-            }
-            // Restore currentUser (remember me) - this is always browser-specific
-            if (data.currentUser) {
-                _auth.currentUser = data.currentUser;
-            }
-            return true;
+            if (data.currentUser) _auth.currentUser = data.currentUser;
         }
     } catch (e) {
         // ignore
     }
 
-    // Check whether at least one active email admin account is configured.
     if (!isSupabaseDisabled()) {
         try {
             const { data, error } = await supabase
@@ -295,68 +199,17 @@ export async function loadAuth() {
         }
     }
 
-    return supabaseHadData || _auth.emailAuthAvailable;
+    return !!_auth.currentUser || _auth.emailAuthAvailable;
 }
 
 export async function clearAuth() {
     stopInactivityTimer();
-
-    // Legacy PIN clear is disabled in email-only mode.
-    if (ENABLE_LEGACY_PINS && !isSupabaseDisabled()) {
-        try {
-            await supabase
-                .from('pins')
-                .upsert(
-                    {
-                        id: 1,
-                        admin_pin: '',
-                        heir_pins: ['', '', '', ''],
-                        auth_version: AUTH_VERSION,
-                        updated_at: new Date().toISOString(),
-                    },
-                    { onConflict: 'id' }
-                );
-        } catch (e) {
-            console.warn('Supabase pins clear failed:', e);
-        }
-    }
-
-    // Clear localStorage
     try {
         localStorage.removeItem(AUTH_STORAGE_KEY);
     } catch (e) {
         // ignore
     }
-
-    _auth.adminPin = '';
-    _auth.heirPins = ['', '', '', ''];
     _auth.currentUser = null;
-    _auth.authVersion = AUTH_VERSION;
-}
-
-export async function login(pin, rememberMe = true) {
-    if (!ENABLE_LEGACY_PINS) return false;
-    // Hash the input PIN for comparison
-    const hashedPin = await hashPin(pin);
-
-    // Ensure latest PINs are loaded from Supabase
-    await loadAuth();
-
-    if (hashedPin === _auth.adminPin) {
-        _auth.currentUser = { role: 'admin' };
-        await saveAuth({ persistSession: rememberMe });
-        startInactivityTimer();
-        return true;
-    }
-    for (let i = 0; i < _auth.heirPins.length; i++) {
-        if (_auth.heirPins[i] === hashedPin) {
-            _auth.currentUser = { role: 'heir', index: i };
-            await saveAuth({ persistSession: rememberMe });
-            startInactivityTimer();
-            return true;
-        }
-    }
-    return false;
 }
 
 export async function logout() {
@@ -373,7 +226,6 @@ export async function logout() {
     renderAuthUI();
 }
 
-// Permission helpers
 export function isAdmin() {
     return _auth.currentUser && _auth.currentUser.role === 'admin';
 }
@@ -392,29 +244,4 @@ export function canEditAllocations(participantId) {
 
 export function canEditParticipant(participantId) {
     return isAdmin() || isHeir(participantId);
-}
-
-// ==============================
-// Migration: Hash existing plain-text PINs
-// ==============================
-export async function migrateAuthToHashed() {
-    if (!ENABLE_LEGACY_PINS) return false;
-    if (_auth.authVersion >= AUTH_VERSION) return false;
-
-    let changed = false;
-    if (_auth.adminPin && _auth.adminPin.length < 64) {
-        _auth.adminPin = await hashPin(_auth.adminPin);
-        changed = true;
-    }
-    for (let i = 0; i < _auth.heirPins.length; i++) {
-        if (_auth.heirPins[i] && _auth.heirPins[i].length < 64) {
-            _auth.heirPins[i] = await hashPin(_auth.heirPins[i]);
-            changed = true;
-        }
-    }
-    if (changed) {
-        _auth.authVersion = AUTH_VERSION;
-        await saveAuth();
-    }
-    return changed;
 }
