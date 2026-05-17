@@ -949,15 +949,10 @@ async function init() {
     // Load auth first
     await loadAuth();
 
-    // Migrate existing plain-text PINs to hashed format
-    await migrateAuthToHashed();
-
     await loadState();
     await loadEmailUsersState();
 
     // Bind auth form events
-    $('#setup-form')?.addEventListener('submit', handleSetup);
-    $('#login-form')?.addEventListener('submit', handleLogin);
     $('#login-email-form')?.addEventListener('submit', handleEmailLogin);
     $('#login-email-verify-form')?.addEventListener('submit', handleEmailVerify);
     $('#logout-btn')?.addEventListener('click', handleLogout);
@@ -1071,17 +1066,6 @@ async function init() {
             handleDeleteItem(btn);
         }
     });
-
-    // PIN management buttons (delegated via pins-grid)
-    const pinsGrid = $('#pins-grid');
-    if (pinsGrid) {
-        pinsGrid.addEventListener('click', (e) => {
-            const changeBtn = e.target.closest('[data-action="change-pin"]');
-            if (changeBtn) handleChangePin(changeBtn);
-            const removeBtn = e.target.closest('[data-action="remove-pin"]');
-            if (removeBtn) handleRemovePin(removeBtn);
-        });
-    }
 
     document.querySelector('#save-email-users-btn')?.addEventListener('click', async (e) => {
         e.preventDefault();

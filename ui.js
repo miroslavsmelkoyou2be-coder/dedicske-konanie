@@ -234,42 +234,22 @@ export function showPinInputModal({ title, message, initialValue, onSubmit }) {
 // Auth UI
 // ==============================
 export function renderAuthUI() {
-    const setupOverlay = $('#setup-overlay');
     const loginOverlay = $('#login-overlay');
     const headerUserInfo = $('#header-user-info');
     const headerUserBadge = $('#header-user-badge');
 
     const a = getAuth();
-    if (!a.adminPin && !hasEmailAuthConfigured()) {
-        // First run – show setup
-        if (setupOverlay) {
-            setupOverlay.style.display = 'flex';
-            setupOverlay.setAttribute('aria-hidden', 'false');
-        }
-        if (loginOverlay) {
-            loginOverlay.style.display = 'none';
-            loginOverlay.setAttribute('aria-hidden', 'true');
-        }
-        if (headerUserInfo) headerUserInfo.style.display = 'none';
-    } else if (!a.currentUser) {
+    if (!a.currentUser) {
         // Not logged in – show login
-        if (setupOverlay) {
-            setupOverlay.style.display = 'none';
-            setupOverlay.setAttribute('aria-hidden', 'true');
-        }
         if (loginOverlay) {
             loginOverlay.style.display = 'flex';
             loginOverlay.setAttribute('aria-hidden', 'false');
-            // Focus PIN input
-            setTimeout(() => $('#login-pin')?.focus(), 100);
+            // Focus email input
+            setTimeout(() => $('#login-email')?.focus(), 100);
         }
         if (headerUserInfo) headerUserInfo.style.display = 'none';
     } else {
         // Logged in – show app
-        if (setupOverlay) {
-            setupOverlay.style.display = 'none';
-            setupOverlay.setAttribute('aria-hidden', 'true');
-        }
         if (loginOverlay) {
             loginOverlay.style.display = 'none';
             loginOverlay.setAttribute('aria-hidden', 'true');

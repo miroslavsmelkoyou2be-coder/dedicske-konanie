@@ -22,47 +22,12 @@
 <body>
     <div id="app">
 
-        <!-- Auth: First-run Setup (admin PIN not set) -->
-        <div class="auth-overlay" id="setup-overlay" aria-hidden="true">
-            <div class="auth-dialog">
-                <div class="auth-icon">👑</div>
-                <h2>Nastavenie PIN-ov</h2>
-                <p class="auth-desc">Nastavte PIN pre administrátora a voliteľne aj pre jednotlivých dedičov. PIN-y slúžia na prihlásenie a rozlíšenie rolí.</p>
-                <form id="setup-form" class="auth-form">
-                    <div class="auth-field">
-                        <label for="setup-admin-pin">👤 Administrátorský PIN <span class="required">*</span></label>
-                        <input type="password" id="setup-admin-pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Napríklad 1234" required />
-                    </div>
-                    <div class="auth-divider"></div>
-                    <p class="auth-desc small">Voliteľné PIN-y pre dedičov – ak necháte prázdne, daný dedič sa nebude môcť prihlásiť.</p>
-                    <div class="auth-field">
-                        <label for="setup-heir-0" style="--dot-color: var(--p1-color);">Zuzka (1/2)</label>
-                        <input type="password" id="setup-heir-0" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Nepovinné" data-heir-index="0" />
-                    </div>
-                    <div class="auth-field">
-                        <label for="setup-heir-1" style="--dot-color: var(--p2-color);">Dana (1/6)</label>
-                        <input type="password" id="setup-heir-1" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Nepovinné" data-heir-index="1" />
-                    </div>
-                    <div class="auth-field">
-                        <label for="setup-heir-2" style="--dot-color: var(--p3-color);">Katka (1/6)</label>
-                        <input type="password" id="setup-heir-2" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Nepovinné" data-heir-index="2" />
-                    </div>
-                    <div class="auth-field">
-                        <label for="setup-heir-3" style="--dot-color: var(--p4-color);">Miro (1/6)</label>
-                        <input type="password" id="setup-heir-3" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Nepovinné" data-heir-index="3" />
-                    </div>
-                    <div class="auth-error" id="setup-error" aria-live="polite"></div>
-                    <button type="submit" class="btn btn-primary auth-submit">Uložiť a pokračovať</button>
-                </form>
-            </div>
-        </div>
-
         <!-- Auth: Login -->
         <div class="auth-overlay" id="login-overlay" aria-hidden="true">
             <div class="auth-dialog">
                 <div class="auth-icon">🔐</div>
                 <h2>Prihlásenie</h2>
-                <p class="auth-desc">Zadajte svoj PIN pre prístup k aplikácii.</p>
+                <p class="auth-desc">Zadajte email a overovací kód pre prístup k aplikácii.</p>
                 <form id="login-email-form" class="auth-form" style="margin-bottom: 0.75rem;">
                     <div class="auth-field">
                         <label for="login-email">Email (overovací kód)</label>
@@ -78,19 +43,6 @@
                         <input type="text" id="login-email-code" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Napr. 123456" />
                     </div>
                     <button type="submit" class="btn btn-primary auth-submit">Overiť a prihlásiť</button>
-                </form>
-                <p class="auth-desc small">Alebo sa prihláste PIN-om:</p>
-                <form id="login-form" class="auth-form">
-                    <div class="auth-field">
-                        <label for="login-pin">Váš PIN</label>
-                        <input type="password" id="login-pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Zadajte PIN" required autofocus />
-                    </div>
-                    <div class="auth-error" id="login-error" aria-live="polite">Nesprávny PIN. Skúste to znova.</div>
-                    <label class="auth-remember">
-                        <input type="checkbox" id="login-remember" checked />
-                        <span class="auth-remember-label">Zapamätať si ma</span>
-                    </label>
-                    <button type="submit" class="btn btn-primary auth-submit">Prihlásiť sa</button>
                 </form>
             </div>
         </div>
@@ -508,15 +460,14 @@
 
 
 
-            <!-- Admin: PIN Management -->
+            <!-- Admin: Access Management -->
             <section class="card card-pins" id="pins-section" style="display:none;">
                 <div class="card-header">
-                    <h2>Správa PIN-ov</h2>
-                    <p>Spravujte prístupové PIN-y pre administrátora a dedičov</p>
+                    <h2>Správa prístupov</h2>
+                    <p>Spravujte email prístupy pre administrátora a dedičov</p>
                 </div>
-                <div class="pins-grid" id="pins-grid"></div>
                 <div class="email-users-management" id="email-users-management">
-                    <div class="card-header" style="margin-top:1rem;">
+                    <div class="card-header">
                         <h3>Email prístupy</h3>
                         <p>Priraďte emaily používateľom pre OTP prihlásenie.</p>
                     </div>
