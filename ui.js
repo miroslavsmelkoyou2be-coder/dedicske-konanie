@@ -4,7 +4,7 @@
  * DOM helpers, modals, toasts, and all rendering functions.
  */
 
-import { getAuth, isAdmin, canEditItems, canEditAllocations, canEditParticipant } from './auth.js';
+import { getAuth, isAdmin, canEditItems, canEditAllocations, canEditParticipant, hasEmailAuthConfigured } from './auth.js';
 import {
     getState, getPColor, getTotalValue, getAssignedValue, getAssignedTotal,
     getUnassignedTotal, getItemAllocatedPct, getPrimaryParticipant,
@@ -240,7 +240,7 @@ export function renderAuthUI() {
     const headerUserBadge = $('#header-user-badge');
 
     const a = getAuth();
-    if (!a.adminPin) {
+    if (!a.adminPin && !hasEmailAuthConfigured()) {
         // First run – show setup
         if (setupOverlay) {
             setupOverlay.style.display = 'flex';

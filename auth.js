@@ -66,10 +66,15 @@ const _auth = {
     heirPins: ['', '', '', ''],
     currentUser: null,  // null | { role: 'admin' } | { role: 'heir', index: 0-3 }
     authVersion: AUTH_VERSION,
+    emailAuthAvailable: false,
 };
 
 export function getAuth() {
     return _auth;
+}
+
+export function hasEmailAuthConfigured() {
+    return _auth.emailAuthAvailable === true;
 }
 
 function normalizeEmail(email) {
@@ -223,6 +228,7 @@ export async function saveAuth(options = {}) {
 
 export async function loadAuth() {
     let supabaseHadData = false;
+    _auth.emailAuthAvailable = false;
 
     // Try Supabase first (disabled in tests)
     if (!isSupabaseDisabled()) {
@@ -272,7 +278,24 @@ export async function loadAuth() {
         // ignore
     }
 
-    return supabaseHadData || !!_auth.adminPin;
+    // Check whether at least one active email admin account is configured.
+    if (!isSupabaseDisabled()) {
+        try {
+            const { data, error } = await supabase
+                .from('app_users')
+                .select('email')
+                .eq('role', 'admin')
+                .eq('is_active', true)
+                .limit(1);
+            if (!error && Array.isArray(data) && data.length > 0) {
+                _auth.emailAuthAvailable = true;
+            }
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    return supabaseHadData || !!_auth.adminPin || _auth.emailAuthAvailable;
 }
 
 export async function clearAuth() {
