@@ -50,3 +50,18 @@ ON CONFLICT (id) DO NOTHING;
 ALTER TABLE app_data DISABLE ROW LEVEL SECURITY;
 ALTER TABLE pins DISABLE ROW LEVEL SECURITY;
 ALTER TABLE app_users DISABLE ROW LEVEL SECURITY;
+
+-- 4. One-time email OTP codes (backend-managed)
+CREATE TABLE IF NOT EXISTS email_otps (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_email_otps_email_created_at
+ON email_otps (email, created_at DESC);
+
+ALTER TABLE email_otps DISABLE ROW LEVEL SECURITY;

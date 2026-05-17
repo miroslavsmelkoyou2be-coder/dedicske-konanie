@@ -14,7 +14,6 @@ import { showToast, renderAuthUI } from './ui.js';
 export const AUTH_STORAGE_KEY = 'dedicskeKonanieAuth';
 export const AUTH_VERSION = 2;
 const isSupabaseDisabled = () => !!globalThis.__DISABLE_SUPABASE__;
-const EMAIL_LOGIN_REDIRECT_PATH = '/';
 
 // Crypto helper: hash PIN using SHA-256
 export async function hashPin(pin) {
@@ -132,19 +131,53 @@ export async function requestEmailMagicLink(email) {
     if (!normalized || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) {
         return { ok: false, error: 'Zadajte platný email' };
     }
-    const profile = await loadEmailProfile(normalized);
-    if (!profile) {
-        return { ok: false, error: 'Email nie je povolený pre prístup do aplikácie.' };
-    }
-    const redirectTo = `${window.location.origin}${EMAIL_LOGIN_REDIRECT_PATH}`;
-    const { error } = await supabase.auth.signInWithOtp({
-        email: normalized,
-        options: { emailRedirectTo: redirectTo },
-    });
-    if (error) {
-        return { ok: false, error: error.message || 'Nepodarilo sa odoslať prihlasovací email.' };
+    try {
+        const response = await fetch('/api/auth/send-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: normalized }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            return { ok: false, error: payload.error || 'Nepodarilo sa odoslať prihlasovací email.' };
+        }
+    } catch (e) {
+        return { ok: false, error: 'Nepodarilo sa kontaktovať prihlasovací server.' };
     }
     return { ok: true };
+}
+
+export async function verifyEmailOtp(email, code) {
+    if (isSupabaseDisabled()) return { ok: false, error: 'Email auth disabled in tests' };
+    const normalized = normalizeEmail(email);
+    const otp = String(code || '').trim();
+    if (!normalized || !otp) {
+        return { ok: false, error: 'Zadajte email a overovací kód.' };
+    }
+    try {
+        const response = await fetch('/api/auth/verify-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: normalized, code: otp }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            return { ok: false, error: payload.error || 'Overenie kódu zlyhalo.' };
+        }
+
+        if (payload.role === 'admin') {
+            _auth.currentUser = { role: 'admin', authType: 'email_otp', email: normalized };
+        } else if (payload.role === 'heir' && Number.isInteger(payload.participantId)) {
+            _auth.currentUser = { role: 'heir', index: payload.participantId, authType: 'email_otp', email: normalized };
+        } else {
+            return { ok: false, error: 'Neplatný profil používateľa.' };
+        }
+        await saveAuth({ persistSession: true });
+        startInactivityTimer();
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, error: 'Nepodarilo sa kontaktovať overovací server.' };
+    }
 }
 
 export async function saveAuth(options = {}) {
@@ -237,12 +270,6 @@ export async function loadAuth() {
         }
     } catch (e) {
         // ignore
-    }
-
-    // Email auth session (Supabase Auth) has priority over stale local cache
-    const hasEmailSession = await restoreEmailSession();
-    if (hasEmailSession) {
-        return true;
     }
 
     return supabaseHadData || !!_auth.adminPin;

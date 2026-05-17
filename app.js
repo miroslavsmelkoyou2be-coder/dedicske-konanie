@@ -7,7 +7,7 @@
 
 import {
     getAuth, hashPin, saveAuth, loadAuth, clearAuth, login, logout,
-    requestEmailMagicLink,
+    requestEmailMagicLink, verifyEmailOtp,
     isAdmin, isHeir, canEditItems, canEditAllocations, canEditParticipant,
     migrateAuthToHashed, startInactivityTimer, stopInactivityTimer,
     bindActivityListeners, AUTH_VERSION,
@@ -247,7 +247,29 @@ async function handleEmailLogin(e) {
     }
     const emailInput = $('#login-email');
     if (emailInput) emailInput.value = '';
-    showToast('Poslali sme prihlasovací odkaz na email.', 'success');
+    showToast('Poslali sme overovací kód na email.', 'success');
+}
+
+async function handleEmailVerify(e) {
+    e.preventDefault();
+    const email = $('#login-email')?.value.trim() || '';
+    const code = $('#login-email-code')?.value.trim() || '';
+    const emailError = $('#login-email-error');
+    const result = await verifyEmailOtp(email, code);
+    if (!result.ok) {
+        if (emailError) {
+            emailError.textContent = result.error || 'Overenie kódu zlyhalo.';
+            emailError.classList.add('visible');
+        }
+        return;
+    }
+    if (emailError) emailError.classList.remove('visible');
+    const codeInput = $('#login-email-code');
+    if (codeInput) codeInput.value = '';
+    renderAuthUI();
+    renderAll();
+    const role = isAdmin() ? 'ako administrátor' : `ako ${state.participants[auth.currentUser.index].name}`;
+    showToast(`Prihlásený ${role}`, 'success');
 }
 
 async function handleLogout(e) {
@@ -777,6 +799,7 @@ async function init() {
     $('#setup-form')?.addEventListener('submit', handleSetup);
     $('#login-form')?.addEventListener('submit', handleLogin);
     $('#login-email-form')?.addEventListener('submit', handleEmailLogin);
+    $('#login-email-verify-form')?.addEventListener('submit', handleEmailVerify);
     $('#logout-btn')?.addEventListener('click', handleLogout);
     $('#header-logout-btn')?.addEventListener('click', handleLogout);
     $('#forgot-pin-btn')?.addEventListener('click', handleForgotPin);
