@@ -68,6 +68,7 @@ export default async function handler(req, res) {
         await sendEmailWithResend(normalized, code);
         return json(res, 200, { ok: true });
     } catch (e) {
-        return json(res, 500, { error: 'Nepodarilo sa odoslat overovaci kod.' });
+        const msg = String(e?.message || e || 'unknown_error');
+        return json(res, 500, { error: 'Nepodarilo sa odoslat overovaci kod.', detail: msg });
     }
 }
