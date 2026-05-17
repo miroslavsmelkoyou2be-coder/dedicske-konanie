@@ -50,3 +50,22 @@ CREATE INDEX IF NOT EXISTS idx_email_otps_email_created_at
 ON email_otps (email, created_at DESC);
 
 ALTER TABLE email_otps DISABLE ROW LEVEL SECURITY;
+
+-- 5. Admin access audit + simple rate-limit support
+CREATE TABLE IF NOT EXISTS admin_access_audit (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_email TEXT,
+    actor_role TEXT,
+    actor_ip_hash TEXT,
+    action TEXT NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_access_audit_action_ip_created
+ON admin_access_audit (action, actor_ip_hash, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_admin_access_audit_created
+ON admin_access_audit (created_at DESC);
+
+ALTER TABLE admin_access_audit DISABLE ROW LEVEL SECURITY;

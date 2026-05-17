@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'node:crypto';
 
 function json(res, status, body) {
     res.status(status).setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -16,6 +17,23 @@ function getAdminClient() {
 
 function normalizeEmail(email) {
     return String(email || '').trim().toLowerCase();
+}
+
+function hashIp(ip) {
+    return crypto.createHash('sha256').update(String(ip || 'unknown')).digest('hex');
+}
+
+async function checkRateLimit(supabase, ipHash) {
+    const sinceIso = new Date(Date.now() - 60 * 1000).toISOString();
+    const { count, error } = await supabase
+        .from('admin_access_audit')
+        .select('*', { count: 'exact', head: true })
+        .eq('action', 'save_email_users')
+        .eq('actor_ip_hash', ipHash)
+        .gte('created_at', sinceIso);
+    if (error) return { ok: true };
+    // Max 10 save attempts per minute per IP
+    return { ok: (count || 0) < 10 };
 }
 
 async function isActiveAdminByEmail(supabase, email) {
@@ -50,6 +68,10 @@ export default async function handler(req, res) {
             if (actorRole !== 'admin') return json(res, 403, { error: 'Iba admin moze upravovat pristupy.' });
             const adminOk = await isActiveAdminByEmail(supabase, actorEmail);
             if (!adminOk) return json(res, 403, { error: 'Neplatny admin kontext.' });
+            const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
+            const ipHash = hashIp(ip);
+            const rate = await checkRateLimit(supabase, ipHash);
+            if (!rate.ok) return json(res, 429, { error: 'Prilis vela pokusov. Skuste to o chvilu.' });
 
             const rows = Array.isArray(req.body?.rows) ? req.body.rows : null;
             if (!rows || rows.length === 0) return json(res, 400, { error: 'Chybaju data na ulozenie.' });
@@ -59,6 +81,13 @@ export default async function handler(req, res) {
             if (delError) return json(res, 500, { error: 'Nepodarilo sa pripravit ulozenie.' });
             const { error: insError } = await supabase.from('app_users').insert(rows);
             if (insError) return json(res, 500, { error: 'Ulozenie pristupov zlyhalo.' });
+            await supabase.from('admin_access_audit').insert({
+                actor_email: actorEmail,
+                actor_role: actorRole,
+                actor_ip_hash: ipHash,
+                action: 'save_email_users',
+                payload: { count: rows.length },
+            });
             return json(res, 200, { ok: true });
         }
 
