@@ -39,6 +39,34 @@ import {
 
 const auth = getAuth();
 const state = getState();
+const OTP_RESEND_COOLDOWN_SEC = 60;
+let otpCooldownTimer = null;
+
+function stopOtpCooldown() {
+    if (otpCooldownTimer) {
+        clearInterval(otpCooldownTimer);
+        otpCooldownTimer = null;
+    }
+}
+
+function startOtpCooldown(seconds = OTP_RESEND_COOLDOWN_SEC) {
+    const sendBtn = $('#login-email-form button[type="submit"]');
+    if (!sendBtn) return;
+    stopOtpCooldown();
+    let remaining = seconds;
+    sendBtn.disabled = true;
+    sendBtn.textContent = `Poslať nový kód (${remaining}s)`;
+    otpCooldownTimer = setInterval(() => {
+        remaining -= 1;
+        if (remaining <= 0) {
+            stopOtpCooldown();
+            sendBtn.disabled = false;
+            sendBtn.textContent = 'Poslať nový kód';
+            return;
+        }
+        sendBtn.textContent = `Poslať nový kód (${remaining}s)`;
+    }, 1000);
+}
 
 // ==============================
 // Sort / Filter Handlers
@@ -254,6 +282,11 @@ async function handleEmailLogin(e) {
         emailStatus.textContent = `Overovaci kod bol odoslany na ${email}.`;
         emailStatus.style.display = 'block';
     }
+    const sendBtn = $('#login-email-form button[type="submit"]');
+    if (sendBtn) {
+        sendBtn.textContent = 'Poslať nový kód';
+    }
+    startOtpCooldown();
     showToast('Poslali sme overovací kód na email.', 'success');
 }
 
