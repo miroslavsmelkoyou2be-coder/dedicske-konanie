@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dedičské konanie – rozdelenie majetku</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+</head>
+<body>
+    <div id="app">
+
+        <!-- Auth: First-run Setup (admin PIN not set) -->
+        <div class="auth-overlay" id="setup-overlay" aria-hidden="true">
+            <div class="auth-dialog">
+                <div class="auth-icon">👑</div>
+                <h2>Nastavenie PIN-ov</h2>
+                <p class="auth-desc">Nastavte PIN pre administrátora a voliteľne aj pre jednotlivých dedičov. PIN-y slúžia na prihlásenie a rozlíšenie rolí.</p>
+                <form id="setup-form" class="auth-form">
+                    <div class="auth-field">
+                        <label for="setup-admin-pin">👤 Administrátorský PIN <span class="required">*</span></label>
+                        <input type="password" id="setup-admin-pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Napríklad 1234" required />
+                    </div>
+                    <div class="auth-divider"></div>
+                    <p class="auth-desc small">Voliteľné PIN-y pre dedičov – ak necháte prázdne, daný dedič sa nebude môcť prihlásiť.</p>
+                    <div class="auth-field">
+                        <label for="setup-heir-0" style="--dot-color: var(--p1-color);">Zuzka (1/2)</label>
+                        <input type="password" id="setup-heir-0" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Nepovinné" data-heir-index="0" />
+                    </div>
+                    <div class="auth-field">
+                        <label for="setup-heir-1" style="--dot-color: var(--p2-color);">Dana (1/6)</label>
+                        <input type="password" id="setup-heir-1" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Nepovinné" data-heir-index="1" />
+                    </div>
+                    <div class="auth-field">
+                        <label for="setup-heir-2" style="--dot-color: var(--p3-color);">Katka (1/6)</label>
+                        <input type="password" id="setup-heir-2" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Nepovinné" data-heir-index="2" />
+                    </div>
+                    <div class="auth-field">
+                        <label for="setup-heir-3" style="--dot-color: var(--p4-color);">Miro (1/6)</label>
+                        <input type="password" id="setup-heir-3" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Nepovinné" data-heir-index="3" />
+                    </div>
+                    <div class="auth-error" id="setup-error" aria-live="polite"></div>
+                    <button type="submit" class="btn btn-primary auth-submit">Uložiť a pokračovať</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Auth: Login -->
+        <div class="auth-overlay" id="login-overlay" aria-hidden="true">
+            <div class="auth-dialog">
+                <div class="auth-icon">🔐</div>
+                <h2>Prihlásenie</h2>
+                <p class="auth-desc">Zadajte svoj PIN pre prístup k aplikácii.</p>
+                <form id="login-form" class="auth-form">
+                    <div class="auth-field">
+                        <label for="login-pin">Váš PIN</label>
+                        <input type="password" id="login-pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" placeholder="Zadajte PIN" required autofocus />
+                    </div>
+                    <div class="auth-error" id="login-error" aria-live="polite">Nesprávny PIN. Skúste to znova.</div>
+                    <label class="auth-remember">
+                        <input type="checkbox" id="login-remember" checked />
+                        <span class="auth-remember-label">Zapamätať si ma</span>
+                    </label>
+                    <button type="submit" class="btn btn-primary auth-submit">Prihlásiť sa</button>
+                    <p class="auth-forgot"><button type="button" class="auth-forgot-btn" id="forgot-pin-btn">Zabudli ste PIN?</button></p>
+                </form>
+            </div>
+        </div>
+
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="header-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="260" height="300" viewBox="0 0 260 300">
+                        <path d="M 6,6 6,168.333 c 0,68.8515 55.2928,124.6667 123.5,124.6667 68.2072,0 123.5,-55.8152 123.5,-124.6667 L 253,6 6,6 z" fill="url(#shield-red)" stroke="rgba(255,255,255,0.8)" stroke-width="2"/>
+                        <path d="m 207.0067,57.7303 c 5.9673,5.0072 6.7166,7.9392 3.4393,11.995 C 119.937,181.7332 105.3431,189.1986 80.3304,230.9025 69.8344,248.4028 66.2547,248.4961 54.9176,238.9831 43.5804,229.4701 43.0507,225.9286 58.4624,212.5531 95.1894,180.6786 99.9871,164.9933 194.5766,56.4093 c 3.4251,-3.9319 6.4627,-3.6863 12.4301,1.321 z" fill="#f9d26d" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"/>
+                        <path d="m 248.1983,97.6288 c 0.8067,2.8276 -2.5463,8.0066 -6.682,12.9352 -4.1356,4.9287 -8.6537,9.1301 -11.5784,8.8267 -4.8854,-6.496 -8.8598,-12.7878 -41.65,-39.3523 C 156.4331,52.3593 149.5467,49.5379 142.3011,45.8547 c -0.8067,-2.8276 2.5463,-8.0066 6.682,-12.9352 4.1356,-4.9287 8.6537,-9.1301 11.5784,-8.8267 4.8854,6.496 8.8598,12.7878 41.65,39.3523 31.8548,27.6791 38.7412,30.5006 45.9869,34.1838 z" fill="#222" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"/>
+                        <path d="m 51.9933,57.7303 c -5.9673,5.0072 -6.7166,7.9392 -3.4393,11.995 C 139.063,181.7332 153.6569,189.1986 178.6696,230.9025 c 10.496,17.5003 14.0757,17.5935 25.4129,8.0805 11.3371,-9.513 11.8669,-13.0545 -3.5449,-26.43 C 163.8106,180.6786 159.0129,164.9933 64.4234,56.4093 60.9982,52.4775 57.9606,52.7231 51.9933,57.7303 z" fill="#f9d26d" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"/>
+                        <path d="M 17.1066,114.5465 C 21.1447,100.4662 35.6801,81.2482 61.279,56.0036 76.4938,40.9995 98.328,24.1681 102.1131,25.7173 114.2748,29.0578 119.7665,34.2727 125.1082,42.4456 74.8903,68.625 49.0131,91.0257 17.1066,114.5465 z" fill="#222" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"/>
+                        <path d="m 74.4496,135.4317 10.2987,14.0683 -10.2987,14.0683 17.3328,-1.8848 7.0342,15.9531 7.0341,-15.9531 17.3328,1.8848 -10.2987,-14.0683 10.2987,-14.0683 -17.3328,1.8848 -7.0341,-15.9531 -7.0342,15.9531 z" fill="#f9d26d" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"/>
+                        <path d="m 233.2844,135.4317 10.2987,14.0683 -10.2987,14.0683 17.3329,-1.8848 7.0341,15.9531 7.0342,-15.9531 17.3328,1.8848 -10.2987,-14.0683 10.2987,-14.0683 -17.3328,1.8848 -7.0342,-15.9531 -7.0341,15.9531 z" fill="#f9d26d" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"/>
+                        <path d="m 135.73,196.8211 c -22.4009,0 -40.5605,18.1595 -40.5605,40.5605 0,22.4009 18.1596,40.5605 40.5605,40.5605 4.2133,0 8.28,-0.6499 12.1005,-1.8421 -16.4925,-5.1465 -28.4768,-20.5307 -28.4768,-38.7184 0,-18.1876 11.9843,-33.5719 28.4768,-38.7183 -3.8206,-1.1922 -7.8872,-1.8421 -12.1005,-1.8421 z" fill="#f9d26d" stroke="rgba(255,255,255,0.4)" stroke-width="0.5"/>
+                        <defs>
+                            <linearGradient id="shield-red" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stop-color="#dc2626"/>
+                                <stop offset="100%" stop-color="#991b1b"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <h1>Dedičské konanie</h1>
+                <p class="header-subtitle">Rozdelenie majetku medzi účastníkov konania</p>
+                <div class="header-user-info" id="header-user-info" style="display:none;">
+                    <span class="header-user-badge" id="header-user-badge"></span>
+                    <button class="header-logout-btn" id="header-logout-btn">
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                        <path d="M5 12H3a1 1 0 01-1-1V3a1 1 0 011-1h2M9 10l3-3-3-3M12 7H5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Odhlásiť
+                </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Admin Navigation -->
+            <nav class="admin-nav" id="admin-nav" style="display:none;" aria-label="Admin navigácia">
+                <button class="admin-nav-btn active" data-tab="majetok">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <rect x="3" y="5" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M7 5V3a1 1 0 011-1h2a1 1 0 011 1v2" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M6 9h6M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    Majetok
+                </button>
+                <button class="admin-nav-btn" data-tab="naklady">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <path d="M3 5h12M3 9h12M3 13h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    Náklady
+                </button>
+                <button class="admin-nav-btn" data-tab="pins">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <rect x="4" y="2" width="10" height="14" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                        <circle cx="9" cy="8" r="2" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M8 10l-1 4h4l-1-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Správa PIN
+                </button>
+            </nav>
+
+            <!-- Heir Navigation -->
+            <nav class="heir-nav" id="heir-nav" style="display:none;" aria-label="Navigácia pre dediča">
+                <button class="heir-nav-btn active" data-heir-tab="majetok">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <rect x="3" y="5" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M7 5V3a1 1 0 011-1h2a1 1 0 011 1v2" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M6 9h6M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    Majetok na rozdelenie
+                </button>
+                <button class="heir-nav-btn" data-heir-tab="naklady">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <path d="M3 5h12M3 9h12M3 13h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    Náklady
+                </button>
+            </nav>
+
+            <!-- Cash -->
+            <section class="card card-cash" id="cash-section">
+                <div class="card-header">
+                    <h2>💵 Hotovosť</h2>
+                    <p>Správa celkovej hotovosti. Zostatok po odpočítaní nákladov je automaticky k dispozícii na alokáciu.</p>
+                </div>
+                <div class="cash-total-row">
+                    <label for="cash-total">Celková hotovosť</label>
+                    <div class="cash-input-wrap">
+                        <input type="number" id="cash-total" value="0.00" min="0" step="100" inputmode="decimal" />
+                        <span class="cash-suffix">€</span>
+                    </div>
+                </div>
+                <div class="cash-remaining-row">
+                    <span>Zostatok po odpočítaní nákladov</span>
+                    <span class="cash-remaining-value" id="cash-remaining">€0.00</span>
+                </div>
+            </section>
+
+            <!-- Expenses -->
+            <section class="card card-expenses" id="expenses-section">
+                <div class="card-header">
+                    <h2>📋 Náklady</h2>
+                    <p>Náklady, ktoré sa odpočítajú z hotovosti.</p>
+                </div>
+                <form class="expense-form" id="expense-form" novalidate>
+                    <div class="expense-form-row">
+                        <div class="expense-form-group">
+                            <label for="expense-name">Názov</label>
+                            <input type="text" id="expense-name" placeholder="napr. Notárske poplatky" required />
+                        </div>
+                        <div class="expense-form-group">
+                            <label for="expense-participant">Účastník</label>
+                            <select id="expense-participant" class="expense-select">
+                                <option value="0">Zuzka</option>
+                                <option value="1">Dana</option>
+                                <option value="2">Katka</option>
+                                <option value="3">Miro</option>
+                            </select>
+                        </div>
+                        <div class="expense-form-group expense-form-group-sm">
+                            <label for="expense-value">Hodnota (€)</label>
+                            <input type="number" id="expense-value" placeholder="0.00" min="0" step="0.01" inputmode="decimal" required />
+                        </div>
+                        <button type="submit" class="btn btn-primary" id="expense-add-btn">Pridať</button>
+                    </div>
+                </form>
+                <hr class="cash-divider" />
+                <div class="expense-header">
+                    <h3>Zoznam nákladov</h3>
+                </div>
+                <div class="expense-list" id="expense-list">
+                    <p class="text-muted small" style="padding: 0.5rem 0;">Zatiaľ žiadne náklady.</p>
+                </div>
+            </section>
+
+            <!-- Summary Bar -->
+            <div class="summary-bar" id="summary-bar">
+                <div class="summary-stat">
+                    <span class="stat-icon stat-icon-total">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <rect x="3" y="5" width="14" height="11" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M7 5V4a1 1 0 011-1h4a1 1 0 011 1v1" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M6 10h8M6 13h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <div class="stat-body">
+                        <span class="stat-label">Celková hodnota majetku</span>
+                        <span class="stat-value" id="stat-total">€0.00</span>
+                    </div>
+                </div>
+                <div class="summary-stat">
+                    <span class="stat-icon stat-icon-assigned">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M7 10l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </span>
+                    <div class="stat-body">
+                        <span class="stat-label">Pridelená hodnota</span>
+                        <span class="stat-value stat-value-assigned" id="stat-assigned">€0.00</span>
+                    </div>
+                </div>
+                <div class="summary-stat">
+                    <span class="stat-icon stat-icon-unassigned">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <circle cx="10" cy="10" r="7" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M7 10h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                    <div class="stat-body">
+                        <span class="stat-label">Nepridelená hodnota</span>
+                        <span class="stat-value stat-value-unassigned" id="stat-unassigned">€0.00</span>
+                    </div>
+                </div>
+                <div class="summary-bar-progress" id="summary-bar-progress">
+                    <div class="bar-fill-assigned" id="bar-fill-assigned" style="width: 0%;"></div>
+                    <div class="bar-fill-unassigned" id="bar-fill-unassigned" style="width: 0%;"></div>
+                </div>
+            </div>
+
+            <!-- Add Item Form -->
+            <section class="card card-form" id="add-item-section">
+                <div class="card-header">
+                    <h2>Pridať položku majetku</h2>
+                    <p>Zadajte názov a hodnotu položky, ktorá sa má stať predmetom dedičstva</p>
+                </div>
+                <form id="add-item-form" class="form-row" novalidate>
+                    <div class="form-group">
+                        <label for="item-name">Názov položky</label>
+                        <input
+                            type="text"
+                            id="item-name"
+                            placeholder="napr. Rodinný dom, Pozemok, Auto..."
+                            required
+                        />
+                    </div>
+                    <div class="form-group form-group-category">
+                        <label for="item-category">Kategória</label>
+                        <input
+                            type="text"
+                            id="item-category"
+                            placeholder="napr. Nehnuteľnosť, Cenné papiere..."
+                            list="category-datalist"
+                        />
+                        <datalist id="category-datalist"></datalist>
+                    </div>
+                    <div class="form-group">
+                        <label for="item-value">Hodnota (€)</label>
+                        <input
+                            type="number"
+                            id="item-value"
+                            placeholder="0.00"
+                            min="0"
+                            step="0.01"
+                            inputmode="decimal"
+                            required
+                        />
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="add-btn">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        Pridať položku
+                    </button>
+                </form>
+            </section>
+
+            <!-- Items List -->
+            <section class="card card-items" id="items-section">
+                <div class="card-header">
+                    <h2>Majetok na rozdelenie</h2>
+                    <p id="total-value-display">Počet položiek: <strong id="items-count-display">0</strong></p>
+                </div>
+                <div class="sort-bar" id="sort-bar">
+                    <label for="filter-category" class="sort-label">Filter:</label>
+                    <select id="filter-category" class="sort-select filter-select">
+                        <option value="all">Všetky kategórie</option>
+                    </select>
+                    <span class="sort-separator"></span>
+                    <label for="sort-select" class="sort-label">Zoradiť:</label>
+                    <select id="sort-select" class="sort-select">
+                        <option value="order">Podľa pridania</option>
+                        <option value="value">Podľa hodnoty</option>
+                        <option value="name">Podľa názvu</option>
+                        <option value="category">Podľa kategórie</option>
+                        <option value="participant">Podľa účastníka</option>
+                    </select>
+                    <button class="btn btn-icon sort-direction-btn" id="sort-dir-btn" title="Obrátiť poradie">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path d="M8 3v10M5 8l3-3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="items-list" id="items-list">
+                    <div class="items-empty">
+                        <svg width="48" height="48" viewBox="0 0 48 48" fill="none" opacity="0.3">
+                            <rect x="8" y="14" width="32" height="24" rx="3" stroke="currentColor" stroke-width="2"/>
+                            <path d="M18 14V10a2 2 0 012-2h8a2 2 0 012 2v4" stroke="currentColor" stroke-width="2"/>
+                            <path d="M16 24h16M16 30h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                        <p>Zatiaľ nebol pridaný žiadny majetok.</p>
+                        <p class="text-muted">Pridajte položky pomocou formulára vyššie.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Participants Section -->
+            <section class="card card-participants" id="participants-section">
+                <div class="card-header">
+                    <h2>Účastníci konania</h2>
+                </div>
+                <div class="participants-grid" id="participants-grid">
+                    <!-- Participant 1 -->
+                    <div class="participant-card" data-participant="0">
+                        <div class="participant-header">
+                            <div class="participant-avatar" style="background: var(--p1-color);">
+                                <span>1</span>
+                            </div>
+                            <div class="participant-meta">
+                                <h3 class="participant-name" id="participant-name-0" data-participant-id="0" data-default="Zuzka">Zuzka</h3>
+                                <span class="participant-share">Podiel: <strong>1/2</strong> (50 %)</span>
+                                <div class="participant-color-wrap" id="participant-color-0"></div>
+                            </div>
+                        </div>
+                        <div class="participant-limits">
+                            <div class="limit-row">
+                                <span>Limit</span>
+                                <span class="limit-value" id="limit-0">€0.00</span>
+                            </div>
+                            <div class="limit-row">
+                                <span>Pridelené</span>
+                                <span class="limit-used" id="used-0">€0.00</span>
+                            </div>
+                            <div class="limit-row limit-row-remaining">
+                                <span>Zostáva</span>
+                                <span class="limit-remaining" id="remaining-0">€0.00</span>
+                            </div>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-0" style="width: 0%;"></div>
+                        </div>
+                        <div class="participant-items" id="participant-items-0">
+                            <p class="text-muted small">Zatiaľ žiadne položky</p>
+                        </div>
+                    </div>
+
+                    <!-- Participant 2 -->
+                    <div class="participant-card" data-participant="1">
+                        <div class="participant-header">
+                            <div class="participant-avatar" style="background: var(--p2-color);">
+                                <span>2</span>
+                            </div>
+                            <div class="participant-meta">
+                                <h3 class="participant-name" id="participant-name-1" data-participant-id="1" data-default="Dana">Dana</h3>
+                                <span class="participant-share">Podiel: <strong>1/6</strong> (16.67 %)</span>
+                                <div class="participant-color-wrap" id="participant-color-1"></div>
+                            </div>
+                        </div>
+                        <div class="participant-limits">
+                            <div class="limit-row">
+                                <span>Limit</span>
+                                <span class="limit-value" id="limit-1">€0.00</span>
+                            </div>
+                            <div class="limit-row">
+                                <span>Pridelené</span>
+                                <span class="limit-used" id="used-1">€0.00</span>
+                            </div>
+                            <div class="limit-row limit-row-remaining">
+                                <span>Zostáva</span>
+                                <span class="limit-remaining" id="remaining-1">€0.00</span>
+                            </div>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-1" style="width: 0%;"></div>
+                        </div>
+                        <div class="participant-items" id="participant-items-1">
+                            <p class="text-muted small">Zatiaľ žiadne položky</p>
+                        </div>
+                    </div>
+
+                    <!-- Participant 3 -->
+                    <div class="participant-card" data-participant="2">
+                        <div class="participant-header">
+                            <div class="participant-avatar" style="background: var(--p3-color);">
+                                <span>3</span>
+                            </div>
+                            <div class="participant-meta">
+                                <h3 class="participant-name" id="participant-name-2" data-participant-id="2" data-default="Katka">Katka</h3>
+                                <span class="participant-share">Podiel: <strong>1/6</strong> (16.67 %)</span>
+                                <div class="participant-color-wrap" id="participant-color-2"></div>
+                            </div>
+                        </div>
+                        <div class="participant-limits">
+                            <div class="limit-row">
+                                <span>Limit</span>
+                                <span class="limit-value" id="limit-2">€0.00</span>
+                            </div>
+                            <div class="limit-row">
+                                <span>Pridelené</span>
+                                <span class="limit-used" id="used-2">€0.00</span>
+                            </div>
+                            <div class="limit-row limit-row-remaining">
+                                <span>Zostáva</span>
+                                <span class="limit-remaining" id="remaining-2">€0.00</span>
+                            </div>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-2" style="width: 0%;"></div>
+                        </div>
+                        <div class="participant-items" id="participant-items-2">
+                            <p class="text-muted small">Zatiaľ žiadne položky</p>
+                        </div>
+                    </div>
+
+                    <!-- Participant 4 -->
+                    <div class="participant-card" data-participant="3">
+                        <div class="participant-header">
+                            <div class="participant-avatar" style="background: var(--p4-color);">
+                                <span>4</span>
+                            </div>
+                            <div class="participant-meta">
+                                <h3 class="participant-name" id="participant-name-3" data-participant-id="3" data-default="Miro">Miro</h3>
+                                <span class="participant-share">Podiel: <strong>1/6</strong> (16.67 %)</span>
+                                <div class="participant-color-wrap" id="participant-color-3"></div>
+                            </div>
+                        </div>
+                        <div class="participant-limits">
+                            <div class="limit-row">
+                                <span>Limit</span>
+                                <span class="limit-value" id="limit-3">€0.00</span>
+                            </div>
+                            <div class="limit-row">
+                                <span>Pridelené</span>
+                                <span class="limit-used" id="used-3">€0.00</span>
+                            </div>
+                            <div class="limit-row limit-row-remaining">
+                                <span>Zostáva</span>
+                                <span class="limit-remaining" id="remaining-3">€0.00</span>
+                            </div>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progress-3" style="width: 0%;"></div>
+                        </div>
+                        <div class="participant-items" id="participant-items-3">
+                            <p class="text-muted small">Zatiaľ žiadne položky</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+
+
+            <!-- Admin: PIN Management -->
+            <section class="card card-pins" id="pins-section" style="display:none;">
+                <div class="card-header">
+                    <h2>Správa PIN-ov</h2>
+                    <p>Spravujte prístupové PIN-y pre administrátora a dedičov</p>
+                </div>
+                <div class="pins-grid" id="pins-grid"></div>
+                <div class="pins-actions">
+                    <button class="btn btn-secondary" id="logout-btn">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                            <path d="M7 15H4a1 1 0 01-1-1V4a1 1 0 011-1h3M12 12l3-3-3-3M15 9H7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        Odhlásiť sa
+                    </button>
+                </div>
+            </section>
+
+            <!-- Actions -->
+            <section class="card card-actions">
+                <div class="card-header">
+                    <h2>Správa údajov</h2>
+                    <p>Exportujte, importujte, vytlačte alebo vymažte všetky údaje</p>
+                </div>
+                <div class="actions-row">
+                    <button class="btn btn-primary" id="print-btn">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                            <path d="M4 6V3a1 1 0 011-1h8a1 1 0 011 1v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            <rect x="3" y="6" width="12" height="8" rx="1" stroke="currentColor" stroke-width="1.5"/>
+                            <path d="M5 10h8M5 13h6" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                            <path d="M7 6V4h4v2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+                        </svg>
+                        Tlačiť / PDF
+                    </button>
+                    <button class="btn btn-secondary" id="export-btn">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                            <path d="M9 3v8M6 8l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M3 11v3a1 1 0 001 1h10a1 1 0 001-1v-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                        Exportovať JSON
+                    </button>
+                    <button class="btn btn-secondary" id="import-btn">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                            <path d="M9 13V5M6 8l3-3 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M3 11v3a1 1 0 001 1h10a1 1 0 001-1v-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        </svg>
+                        Importovať JSON
+                    </button>
+                    <input type="file" id="import-input" accept=".json" style="display:none" />
+                    <button class="btn btn-danger-outline" id="reset-btn">
+                        <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                            <path d="M3 9a6 6 0 0111.3-3M15 9a6 6 0 01-11.3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            <path d="M15 3v4h-4M3 15v-4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        Vymazať všetko
+                    </button>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>Aplikácia na pomoc pri dedičskom konaní – rozdelenie majetku podľa zákona</p>
+            <p class="small" style="margin-top:0.25rem">Kliknutím na meno upravíte meno, kliknutím na farbu upravíte farbu účastníka</p>
+        </footer>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal-overlay" id="confirm-modal" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 class="modal-title" id="modal-title">Potvrdenie akcie</h3>
+                <button class="modal-close" id="modal-close" aria-label="Zatvoriť">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M5 5l10 10M15 5l-10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+            <p class="modal-message" id="modal-message">Naozaj chcete pokračovať?</p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="modal-cancel-btn">Zrušiť</button>
+                <button class="btn btn-danger-outline" id="modal-confirm-btn">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <path d="M3 9a6 6 0 0111.3-3M15 9a6 6 0 01-11.3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                        <path d="M15 3v4h-4M3 15v-4h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span id="modal-confirm-text">Vymazať</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PIN Input Modal -->
+    <div class="modal-overlay" id="pin-modal" role="dialog" aria-modal="true" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 class="modal-title" id="pin-modal-title">Zmena PIN-u</h3>
+                <button class="modal-close" id="pin-modal-close" aria-label="Zatvoriť">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                        <path d="M5 5l10 10M15 5l-10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                </button>
+            </div>
+            <p class="modal-message" id="pin-modal-message">Zadajte nový PIN.</p>
+            <input
+                id="pin-modal-input"
+                class="modal-input"
+                type="password"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                maxlength="6"
+                placeholder="Napríklad 1234"
+                autocomplete="off"
+            />
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="pin-modal-cancel-btn">Zrušiť</button>
+                <button class="btn btn-primary" id="pin-modal-save-btn">Uložiť</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

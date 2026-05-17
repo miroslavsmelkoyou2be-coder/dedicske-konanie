@@ -1,0 +1,18 @@
+{
+  "name": "dedicske-konanie",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/run.js",
+    "test:auth": "node tests/run.js auth",
+    "test:state": "node tests/run.js state",
+    "test:ui": "node tests/run.js ui",
+    "test:app": "node tests/run.js app",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.60.0",
+    "jsdom": "^29.1.1"
+  }
+}
