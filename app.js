@@ -36,7 +36,6 @@ import {
 import {
     handleCashChange, handleAddExpense, handleDeleteExpense,
 } from './expenses.js';
-import { supabase } from './supabase.js';
 
 const auth = getAuth();
 const state = getState();
@@ -80,10 +79,10 @@ function normalizeEmail(email) {
 
 async function loadEmailUsersState() {
     try {
-        const { data, error } = await supabase
-            .from('app_users')
-            .select('email, role, participant_id, is_active');
-        if (error) throw error;
+        const response = await fetch('/api/admin/email-users');
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'load_failed');
+        const data = Array.isArray(payload.items) ? payload.items : [];
         emailUsersState.admin = { email: '', isActive: true };
         emailUsersState.heirs = Array.from({ length: 4 }, () => ({ email: '', isActive: true }));
         (data || []).forEach((row) => {
@@ -171,9 +170,19 @@ async function saveEmailUsersManagement() {
     }
 
     try {
-        await supabase.from('app_users').delete().neq('email', '');
-        const { error } = await supabase.from('app_users').insert(rows);
-        if (error) throw error;
+        const response = await fetch('/api/admin/email-users', {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-actor-email': String(auth.currentUser?.email || ''),
+                'x-actor-role': String(auth.currentUser?.role || ''),
+            },
+            body: JSON.stringify({ rows }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(payload.error || 'save_failed');
+        }
         await loadEmailUsersState();
         renderEmailUsersManagement();
         showToast('Email prístupy boli uložené.', 'success');
