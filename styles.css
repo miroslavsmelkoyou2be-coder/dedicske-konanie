@@ -1576,6 +1576,14 @@ body {
     color: var(--text-muted);
 }
 
+/* Email should read naturally; wide PIN spacing is only for code-like inputs */
+#login-email {
+    letter-spacing: normal;
+    text-align: left;
+    font-size: 1rem;
+    font-weight: 500;
+}
+
 .auth-divider {
     height: 1px;
     background: var(--border);
