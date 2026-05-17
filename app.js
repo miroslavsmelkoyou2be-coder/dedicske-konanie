@@ -43,7 +43,7 @@ const OTP_RESEND_COOLDOWN_SEC = 60;
 let otpCooldownTimer = null;
 const emailUsersState = {
     loaded: false,
-    admin: { email: '', isActive: true },
+    admins: [{ email: '', isActive: true }],
     heirs: Array.from({ length: 4 }, () => ({ email: '', isActive: true })),
 };
 
@@ -83,15 +83,18 @@ async function loadEmailUsersState() {
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.error || 'load_failed');
         const data = Array.isArray(payload.items) ? payload.items : [];
-        emailUsersState.admin = { email: '', isActive: true };
+        emailUsersState.admins = [];
         emailUsersState.heirs = Array.from({ length: 4 }, () => ({ email: '', isActive: true }));
         (data || []).forEach((row) => {
             if (row.role === 'admin') {
-                emailUsersState.admin = { email: row.email || '', isActive: row.is_active !== false };
+                emailUsersState.admins.push({ email: row.email || '', isActive: row.is_active !== false });
             } else if (row.role === 'heir' && Number.isInteger(row.participant_id) && row.participant_id >= 0 && row.participant_id <= 3) {
                 emailUsersState.heirs[row.participant_id] = { email: row.email || '', isActive: row.is_active !== false };
             }
         });
+        if (emailUsersState.admins.length === 0) {
+            emailUsersState.admins = [{ email: '', isActive: true }];
+        }
         emailUsersState.loaded = true;
         return true;
     } catch (e) {
@@ -106,6 +109,38 @@ function renderEmailUsersManagement() {
     const labels = ['Administrátor', ...state.participants.map((p) => p.name)];
 
     const rows = [];
+    if (Array.isArray(emailUsersState.admins)) {
+        emailUsersState.admins.forEach((entry, adminIndex) => {
+            rows.push(`
+                <div class="pin-row">
+                    <span class="pin-row-label">${adminIndex === 0 ? labels[0] : `${labels[0]} #${adminIndex + 1}`}</span>
+                    <span class="pin-row-email-input-wrap">
+                        <input type="email" class="pin-row-email-input" data-role="admin" data-admin-index="${adminIndex}" value="${escapeHtml(entry.email)}" placeholder="admin@domena.sk" />
+                    </span>
+                    <span class="pin-row-actions">
+                        <label class="pin-row-active"><input type="checkbox" data-role-active="admin" data-admin-index="${adminIndex}" ${entry.isActive ? 'checked' : ''} /> Aktivny</label>
+                        ${emailUsersState.admins.length > 1 ? `<button type="button" class="btn btn-danger-outline btn-sm" data-remove-admin-index="${adminIndex}">Odstranit</button>` : ''}
+                    </span>
+                </div>
+            `);
+        });
+        for (let i = 0; i < 4; i++) {
+            const entry = emailUsersState.heirs[i];
+            rows.push(`
+                <div class="pin-row">
+                    <span class="pin-row-label" style="--dot-color: ${getPColor(i)};">${labels[i + 1]}</span>
+                    <span class="pin-row-email-input-wrap">
+                        <input type="email" class="pin-row-email-input" data-role="heir" data-participant-id="${i}" value="${escapeHtml(entry.email)}" placeholder="dedic@domena.sk" />
+                    </span>
+                    <span class="pin-row-actions">
+                        <label class="pin-row-active"><input type="checkbox" data-role-active="heir" data-participant-id="${i}" ${entry.isActive ? 'checked' : ''} /> Aktivny</label>
+                    </span>
+                </div>
+            `);
+        }
+        grid.innerHTML = rows.join('');
+        return;
+    }
     rows.push(`
         <div class="pin-row">
             <span class="pin-row-label">${labels[0]}</span>
@@ -135,8 +170,82 @@ function renderEmailUsersManagement() {
     grid.innerHTML = rows.join('');
 }
 
+function addAdminRow() {
+    emailUsersState.admins.push({ email: '', isActive: true });
+    renderEmailUsersManagement();
+}
+
+function removeAdminRow(index) {
+    if (emailUsersState.admins.length <= 1) return;
+    emailUsersState.admins.splice(index, 1);
+    renderEmailUsersManagement();
+}
+
 async function saveEmailUsersManagement() {
     if (!isAdmin()) return;
+    const adminInputs = Array.from($$('.pin-row-email-input[data-role="admin"]'));
+    const adminChecks = Array.from($$('[data-role-active="admin"]'));
+    if (adminInputs.length > 0) {
+        const seenEmails = new Set();
+        const payloadRows = [];
+
+        for (let i = 0; i < adminInputs.length; i++) {
+            const adminEmail = normalizeEmail(adminInputs[i]?.value || '');
+            const adminActive = !!adminChecks[i]?.checked;
+            if (!adminEmail) {
+                showToast('Kazdy administrator musi mat email.', 'error');
+                return;
+            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
+                showToast('Email administratora ma neplatny format.', 'error');
+                return;
+            }
+            if (seenEmails.has(adminEmail)) {
+                showToast('Kazdy email musi byt jedinecny.', 'error');
+                return;
+            }
+            seenEmails.add(adminEmail);
+            payloadRows.push({ email: adminEmail, role: 'admin', participant_id: null, is_active: adminActive });
+        }
+
+        for (let i = 0; i < 4; i++) {
+            const email = normalizeEmail($(`.pin-row-email-input[data-role="heir"][data-participant-id="${i}"]`)?.value || '');
+            const isActive = !!$(`[data-role-active="heir"][data-participant-id="${i}"]`)?.checked;
+            if (!email) continue;
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                showToast(`Email pre ${state.participants[i].name} ma neplatny format.`, 'error');
+                return;
+            }
+            if (seenEmails.has(email)) {
+                showToast('Kazdy email musi byt jedinecny.', 'error');
+                return;
+            }
+            seenEmails.add(email);
+            payloadRows.push({ email, role: 'heir', participant_id: i, is_active: isActive });
+        }
+
+        try {
+            const response = await fetch('/api/admin/email-users', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-actor-email': String(auth.currentUser?.email || ''),
+                    'x-actor-role': String(auth.currentUser?.role || ''),
+                },
+                body: JSON.stringify({ rows: payloadRows }),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload.error || 'save_failed');
+            }
+            await loadEmailUsersState();
+            renderEmailUsersManagement();
+            showToast('Email pristupy boli ulozene.', 'success');
+        } catch (e) {
+            showToast('Ulozenie email pristupov zlyhalo.', 'error');
+        }
+        return;
+    }
     const adminEmail = normalizeEmail($('.pin-row-email-input[data-role="admin"]')?.value || '');
     const adminActive = !!$('[data-role-active="admin"]')?.checked;
     if (!adminEmail) {
@@ -1079,6 +1188,18 @@ async function init() {
     document.querySelector('#save-email-users-btn')?.addEventListener('click', async (e) => {
         e.preventDefault();
         await saveEmailUsersManagement();
+    });
+    document.querySelector('#add-admin-user-btn')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        addAdminRow();
+    });
+    document.querySelector('#email-users-grid')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-remove-admin-index]');
+        if (!btn) return;
+        e.preventDefault();
+        const idx = Number.parseInt(btn.dataset.removeAdminIndex, 10);
+        if (!Number.isInteger(idx) || idx < 0) return;
+        removeAdminRow(idx);
     });
 
     // Participant tag removal (delegated via participants-grid)
