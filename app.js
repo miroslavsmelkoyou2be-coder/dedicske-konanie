@@ -227,6 +227,11 @@ async function handleEmailLogin(e) {
     e.preventDefault();
     const email = $('#login-email')?.value.trim() || '';
     const emailError = $('#login-email-error');
+    const emailStatus = $('#login-email-status');
+    if (emailStatus) {
+        emailStatus.style.display = 'none';
+        emailStatus.textContent = '';
+    }
     if (!email) {
         if (emailError) {
             emailError.textContent = 'Zadajte email.';
@@ -245,8 +250,10 @@ async function handleEmailLogin(e) {
     if (emailError) {
         emailError.classList.remove('visible');
     }
-    const emailInput = $('#login-email');
-    if (emailInput) emailInput.value = '';
+    if (emailStatus) {
+        emailStatus.textContent = `Overovaci kod bol odoslany na ${email}.`;
+        emailStatus.style.display = 'block';
+    }
     showToast('Poslali sme overovací kód na email.', 'success');
 }
 
@@ -255,6 +262,11 @@ async function handleEmailVerify(e) {
     const email = $('#login-email')?.value.trim() || '';
     const code = $('#login-email-code')?.value.trim() || '';
     const emailError = $('#login-email-error');
+    const emailStatus = $('#login-email-status');
+    if (emailStatus) {
+        emailStatus.style.display = 'none';
+        emailStatus.textContent = '';
+    }
     const result = await verifyEmailOtp(email, code);
     if (!result.ok) {
         if (emailError) {
