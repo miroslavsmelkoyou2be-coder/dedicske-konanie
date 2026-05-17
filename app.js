@@ -847,7 +847,6 @@ async function init() {
     $('#login-email-verify-form')?.addEventListener('submit', handleEmailVerify);
     $('#logout-btn')?.addEventListener('click', handleLogout);
     $('#header-logout-btn')?.addEventListener('click', handleLogout);
-    $('#forgot-pin-btn')?.addEventListener('click', handleForgotPin);
 
     form.addEventListener('submit', handleAddItem);
 
