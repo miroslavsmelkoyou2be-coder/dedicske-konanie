@@ -14,6 +14,7 @@ import { showToast, renderAuthUI } from './ui.js';
 export const AUTH_STORAGE_KEY = 'dedicskeKonanieAuth';
 export const AUTH_VERSION = 2;
 const isSupabaseDisabled = () => !!globalThis.__DISABLE_SUPABASE__;
+const ENABLE_LEGACY_PINS = false;
 
 // Crypto helper: hash PIN using SHA-256
 export async function hashPin(pin) {
@@ -187,14 +188,13 @@ export async function verifyEmailOtp(email, code) {
 
 export async function saveAuth(options = {}) {
     const { persistSession = true } = options;
-    const payload = {
-        admin_pin: _auth.adminPin,
-        heir_pins: _auth.heirPins,
-        auth_version: _auth.authVersion || AUTH_VERSION,
-    };
-
-    // Save to Supabase (disabled in tests)
-    if (!isSupabaseDisabled()) {
+    // Legacy PIN persistence is disabled in email-only mode.
+    if (ENABLE_LEGACY_PINS && !isSupabaseDisabled()) {
+        const payload = {
+            admin_pin: _auth.adminPin,
+            heir_pins: _auth.heirPins,
+            auth_version: _auth.authVersion || AUTH_VERSION,
+        };
         try {
             const { error } = await supabase
                 .from('pins')
@@ -230,8 +230,8 @@ export async function loadAuth() {
     let supabaseHadData = false;
     _auth.emailAuthAvailable = false;
 
-    // Try Supabase first (disabled in tests)
-    if (!isSupabaseDisabled()) {
+    // Legacy PIN load is disabled in email-only mode.
+    if (ENABLE_LEGACY_PINS && !isSupabaseDisabled()) {
         try {
             const { data, error } = await supabase
                 .from('pins')
@@ -295,14 +295,14 @@ export async function loadAuth() {
         }
     }
 
-    return supabaseHadData || !!_auth.adminPin || _auth.emailAuthAvailable;
+    return supabaseHadData || _auth.emailAuthAvailable;
 }
 
 export async function clearAuth() {
     stopInactivityTimer();
 
-    // Clear Supabase pins (disabled in tests)
-    if (!isSupabaseDisabled()) {
+    // Legacy PIN clear is disabled in email-only mode.
+    if (ENABLE_LEGACY_PINS && !isSupabaseDisabled()) {
         try {
             await supabase
                 .from('pins')
@@ -335,6 +335,7 @@ export async function clearAuth() {
 }
 
 export async function login(pin, rememberMe = true) {
+    if (!ENABLE_LEGACY_PINS) return false;
     // Hash the input PIN for comparison
     const hashedPin = await hashPin(pin);
 
@@ -397,6 +398,7 @@ export function canEditParticipant(participantId) {
 // Migration: Hash existing plain-text PINs
 // ==============================
 export async function migrateAuthToHashed() {
+    if (!ENABLE_LEGACY_PINS) return false;
     if (_auth.authVersion >= AUTH_VERSION) return false;
 
     let changed = false;
