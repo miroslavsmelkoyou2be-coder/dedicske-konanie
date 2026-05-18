@@ -86,6 +86,41 @@ export function getState() {
     return _state;
 }
 
+function normalizeAuditActor(actor = {}) {
+    return {
+        email: String(actor.email || '').trim().toLowerCase() || null,
+        role: String(actor.role || '').trim().toLowerCase() || null,
+        participantId: Number.isInteger(actor.participantId) ? actor.participantId : null,
+    };
+}
+
+async function recordUserChangeAudit(audit) {
+    if (isSupabaseDisabled() || !audit?.action) return;
+    const actor = normalizeAuditActor(audit.actor || {});
+    try {
+        const { error } = await supabase
+            .from('admin_access_audit')
+            .insert({
+                actor_email: actor.email,
+                actor_role: actor.role,
+                actor_ip_hash: null,
+                action: `user_${audit.action}`,
+                payload: {
+                    actor_participant_id: actor.participantId,
+                    entity_type: audit.entityType || null,
+                    entity_id: audit.entityId !== undefined && audit.entityId !== null ? String(audit.entityId) : null,
+                    summary: audit.summary || null,
+                    details: audit.payload || {},
+                },
+            });
+        if (error) {
+            console.warn('User audit insert error:', error);
+        }
+    } catch (e) {
+        console.warn('User audit insert failed:', e);
+    }
+}
+
 // ==============================
 // Migration
 // ==============================
@@ -187,7 +222,7 @@ function deserializeState(data) {
 // ==============================
 // Persistence (Supabase + localStorage fallback)
 // ==============================
-export async function saveState() {
+export async function saveState(options = {}) {
     const serialized = serializeState();
 
     // Save to Supabase (disabled in tests)
@@ -212,6 +247,10 @@ export async function saveState() {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(serialized));
     } catch (e) {
         console.warn('localStorage save failed:', e);
+    }
+
+    if (options.audit) {
+        await recordUserChangeAudit(options.audit);
     }
 }
 
@@ -258,7 +297,7 @@ function fallbackLoadState() {
     }
 }
 
-export async function clearSavedState() {
+export async function clearSavedState(options = {}) {
     // Clear Supabase (disabled in tests)
     if (!isSupabaseDisabled()) {
         try {
@@ -278,6 +317,10 @@ export async function clearSavedState() {
         localStorage.removeItem(STORAGE_KEY);
     } catch (e) {
         // ignore
+    }
+
+    if (options.audit) {
+        await recordUserChangeAudit(options.audit);
     }
 }
 

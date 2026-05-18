@@ -11,6 +11,7 @@ import {
     isAdmin, isHeir, canEditItems, canEditAllocations, canEditParticipant,
     bindActivityListeners,
 } from './auth.js';
+import { supabase } from './supabase.js';
 import {
     getState, saveState, loadState, clearSavedState,
     getTotalValue, getAssignedValue, getAssignedTotal, getUnassignedTotal,
@@ -49,6 +50,10 @@ const adminAuditState = {
     loaded: false,
     items: [],
 };
+const userAuditState = {
+    loaded: false,
+    items: [],
+};
 
 function stopOtpCooldown() {
     if (otpCooldownTimer) {
@@ -80,6 +85,14 @@ function normalizeEmail(email) {
     return String(email || '').trim().toLowerCase();
 }
 
+function getAuditActor() {
+    return {
+        email: auth.currentUser?.email || '',
+        role: auth.currentUser?.role || '',
+        participantId: Number.isInteger(auth.currentUser?.index) ? auth.currentUser.index : null,
+    };
+}
+
 async function loadEmailUsersState() {
     try {
         const response = await fetch('/api/admin/email-users');
@@ -102,6 +115,33 @@ async function loadEmailUsersState() {
         return true;
     } catch (e) {
         showToast('Nepodarilo sa načítať email prístupy.', 'error');
+        return false;
+    }
+}
+
+async function loadUserChangeAudit() {
+    if (!isAdmin()) return false;
+    const list = $('#user-change-audit-list');
+    if (list) {
+        list.innerHTML = '<p class="text-muted small">Nacitavam zmeny...</p>';
+    }
+    try {
+        const { data, error } = await supabase
+            .from('admin_access_audit')
+            .select('actor_email, actor_role, action, payload, created_at')
+            .like('action', 'user_%')
+            .order('created_at', { ascending: false })
+            .limit(30);
+        if (error) throw error;
+        userAuditState.items = Array.isArray(data) ? data : [];
+        userAuditState.loaded = true;
+        renderUserChangeAudit();
+        return true;
+    } catch (e) {
+        userAuditState.loaded = false;
+        if (list) {
+            list.innerHTML = '<p class="text-muted small">Audit zmien sa nepodarilo nacitat.</p>';
+        }
         return false;
     }
 }
@@ -166,6 +206,53 @@ function renderAdminAuditLog() {
                 <div class="audit-row-meta">
                     <span>${formatAuditDate(item.created_at)}</span>
                     <span>${count ? `${count} pristupov` : 'bez poctu'}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function getAuditActionLabel(action) {
+    const normalized = String(action || '').replace(/^user_/, '');
+    const labels = {
+        add_item: 'Pridanie polozky',
+        delete_item: 'Odstranenie polozky',
+        update_item_value: 'Zmena hodnoty polozky',
+        set_allocation: 'Zmena alokacie',
+        update_participant_name: 'Zmena mena ucastnika',
+        update_participant_color: 'Zmena farby ucastnika',
+        reset_participant_color: 'Reset farby ucastnika',
+        update_cash: 'Zmena hotovosti',
+        add_expense: 'Pridanie nakladu',
+        delete_expense: 'Odstranenie nakladu',
+        update_expense_participant: 'Zmena priradenia nakladu',
+        import_data: 'Import dat',
+        reset_data: 'Vymazanie dat',
+    };
+    return labels[normalized] || normalized || 'Zmena';
+}
+
+function renderUserChangeAudit() {
+    const list = $('#user-change-audit-list');
+    if (!list || !isAdmin()) return;
+    if (!userAuditState.items.length) {
+        list.innerHTML = '<p class="text-muted small">Zatial ziadne zaznamenane uzivatelske zmeny.</p>';
+        return;
+    }
+    list.innerHTML = userAuditState.items.map((item) => {
+        const actor = item.actor_email || (item.actor_role === 'admin' ? 'admin' : 'pouzivatel');
+        const summary = item.payload?.summary || getAuditActionLabel(item.action);
+        const entityType = item.payload?.entity_type || 'data';
+        return `
+            <div class="audit-row">
+                <div class="audit-row-main">
+                    <strong>${escapeHtml(getAuditActionLabel(item.action))}</strong>
+                    <span>${escapeHtml(summary)}</span>
+                    <span>${escapeHtml(actor)}</span>
+                </div>
+                <div class="audit-row-meta">
+                    <span>${formatAuditDate(item.created_at)}</span>
+                    <span>${escapeHtml(entityType)}</span>
                 </div>
             </div>
         `;
@@ -485,7 +572,16 @@ export async function addItem(name, value, category) {
         state.categories.sort();
     }
     state.items.push(item);
-    await saveState();
+    await saveState({
+        audit: {
+            actor: getAuditActor(),
+            action: 'add_item',
+            entityType: 'item',
+            entityId: item.id,
+            summary: `Pridana polozka "${item.name}" (${formatEUR(item.value)})`,
+            payload: { name: item.name, value: item.value, category: item.category },
+        },
+    });
     renderAll();
     showToast(`Pridaná položka "${item.name}" v hodnote ${formatEUR(item.value)}`, 'success');
 }
@@ -494,7 +590,16 @@ export async function deleteItem(itemId) {
     const item = state.items.find((i) => i.id === itemId);
     if (!item) return;
     state.items = state.items.filter((i) => i.id !== itemId);
-    await saveState();
+    await saveState({
+        audit: {
+            actor: getAuditActor(),
+            action: 'delete_item',
+            entityType: 'item',
+            entityId: item.id,
+            summary: `Odstranena polozka "${item.name}"`,
+            payload: { name: item.name, value: item.value, category: item.category },
+        },
+    });
     renderAll();
     showToast(`Odstránená položka "${item.name}"`, 'success');
 }
@@ -504,8 +609,18 @@ export async function updateItemValue(itemId, newValue) {
     if (!item) return;
     // Cash system items are auto-calculated — value change is ignored
     if (item.isSystem) return;
+    const oldValue = item.value;
     item.value = Math.max(0, newValue);
-    await saveState();
+    await saveState({
+        audit: {
+            actor: getAuditActor(),
+            action: 'update_item_value',
+            entityType: 'item',
+            entityId: item.id,
+            summary: `Zmenena hodnota "${item.name}" z ${formatEUR(oldValue)} na ${formatEUR(item.value)}`,
+            payload: { name: item.name, oldValue, newValue: item.value },
+        },
+    });
     renderAll();
 }
 
@@ -555,7 +670,16 @@ export async function setAllocation(itemId, participantId, percentage) {
         }
     }
 
-    await saveState();
+    await saveState({
+        audit: {
+            actor: getAuditActor(),
+            action: 'set_allocation',
+            entityType: 'item',
+            entityId: item.id,
+            summary: `Zmenena alokacia "${item.name}" pre ${state.participants[participantId]?.name || 'dedic'} na ${cappedPct}%`,
+            payload: { itemName: item.name, participantId, requestedPercentage: pct, savedPercentage: cappedPct },
+        },
+    });
     renderAll();
 }
 
@@ -570,8 +694,18 @@ export async function updateParticipantName(participantId, newName) {
         return;
     }
 
+    const oldName = p.name;
     p.name = trimmed;
-    await saveState();
+    await saveState({
+        audit: {
+            actor: getAuditActor(),
+            action: 'update_participant_name',
+            entityType: 'participant',
+            entityId: participantId,
+            summary: `Meno ucastnika zmenene z "${oldName}" na "${trimmed}"`,
+            payload: { oldName, newName: trimmed },
+        },
+    });
     renderAll();
 }
 
@@ -584,7 +718,16 @@ export async function resetParticipantColor(participantId) {
     }
     state.participantColors[participantId] = defaultColor;
     applyColorVariables();
-    await saveState();
+    await saveState({
+        audit: {
+            actor: getAuditActor(),
+            action: 'reset_participant_color',
+            entityType: 'participant',
+            entityId: participantId,
+            summary: `Farba ucastnika ${state.participants[participantId]?.name || participantId} bola vratena na predvolenu`,
+            payload: { color: defaultColor },
+        },
+    });
     renderAll();
     showToast(`Farba účastníka bola vrátená na predvolenú`, 'success');
 }
@@ -593,9 +736,19 @@ export async function updateParticipantColor(participantId, newColor) {
     if (!state.participantColors) {
         state.participantColors = [...DEFAULT_COLORS];
     }
+    const oldColor = state.participantColors[participantId];
     state.participantColors[participantId] = newColor;
     applyColorVariables();
-    await saveState();
+    await saveState({
+        audit: {
+            actor: getAuditActor(),
+            action: 'update_participant_color',
+            entityType: 'participant',
+            entityId: participantId,
+            summary: `Zmenena farba ucastnika ${state.participants[participantId]?.name || participantId}`,
+            payload: { oldColor, newColor },
+        },
+    });
     renderAll();
 }
 
@@ -778,7 +931,16 @@ async function handleExpenseParticipantNameClick(nameEl) {
 
         exp.participantId = nextId;
         syncCashItem();
-        await saveState();
+        await saveState({
+            audit: {
+                actor: getAuditActor(),
+                action: 'update_expense_participant',
+                entityType: 'expense',
+                entityId: exp.id,
+                summary: `Naklad "${exp.name}" priradeny inemu ucastnikovi`,
+                payload: { name: exp.name, oldParticipantId: currentParticipantId, newParticipantId: nextId },
+            },
+        });
         renderAll();
 
         const p = state.participants.find(x => x.id === nextId);
@@ -901,7 +1063,16 @@ async function importData(file) {
             state.nextExpenseId = data.nextExpenseId || 1;
 
             syncCashItem();
-            await saveState();
+            await saveState({
+                audit: {
+                    actor: getAuditActor(),
+                    action: 'import_data',
+                    entityType: 'app_data',
+                    entityId: 1,
+                    summary: `Importovanych ${state.items.length} poloziek`,
+                    payload: { itemCount: state.items.length, expenseCount: state.expenses.length },
+                },
+            });
             renderAll();
             showToast(`Importovaných ${state.items.length} položiek`, 'success');
         } catch (err) {
@@ -949,7 +1120,16 @@ function handleReset(e) {
             state.items.push(getCashItemTemplate());
             state.items.push(getCashExpenseItemTemplate());
             syncCashItem();
-            await clearSavedState();
+            await clearSavedState({
+                audit: {
+                    actor: getAuditActor(),
+                    action: 'reset_data',
+                    entityType: 'app_data',
+                    entityId: 1,
+                    summary: 'Vymazane vsetky data aplikacie',
+                    payload: {},
+                },
+            });
             renderAll();
             showToast('Všetky dáta boli vymazané', 'success');
         },
@@ -1000,6 +1180,7 @@ async function init() {
             if (tab === 'access') {
                 renderEmailUsersManagement();
                 loadAdminAuditLog();
+                loadUserChangeAudit();
             }
         });
     });
@@ -1051,6 +1232,7 @@ async function init() {
         if (isAdmin() && uiState.adminTab === 'access') {
             renderEmailUsersManagement();
             loadAdminAuditLog();
+            loadUserChangeAudit();
         }
     }
 
