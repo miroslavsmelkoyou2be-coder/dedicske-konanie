@@ -49,11 +49,37 @@ async function isActiveAdminByEmail(supabase, email) {
     return !error && !!data;
 }
 
+async function requireActiveAdmin(req, res, supabase) {
+    const actorEmail = normalizeEmail(req.headers['x-actor-email'] || '');
+    const actorRole = String(req.headers['x-actor-role'] || '').toLowerCase();
+    if (actorRole !== 'admin') {
+        json(res, 403, { error: 'Iba admin moze spravovat pristupy.' });
+        return null;
+    }
+    const adminOk = await isActiveAdminByEmail(supabase, actorEmail);
+    if (!adminOk) {
+        json(res, 403, { error: 'Neplatny admin kontext.' });
+        return null;
+    }
+    return { actorEmail, actorRole };
+}
+
 export default async function handler(req, res) {
     try {
         const supabase = getAdminClient();
 
         if (req.method === 'GET') {
+            if (req.query?.audit === '1') {
+                const actor = await requireActiveAdmin(req, res, supabase);
+                if (!actor) return;
+                const { data, error } = await supabase
+                    .from('admin_access_audit')
+                    .select('actor_email, actor_role, action, payload, created_at')
+                    .order('created_at', { ascending: false })
+                    .limit(20);
+                if (error) return json(res, 500, { error: 'Nepodarilo sa nacitat audit pristupov.' });
+                return json(res, 200, { items: data || [] });
+            }
             const { data, error } = await supabase
                 .from('app_users')
                 .select('email, role, participant_id, is_active')
@@ -63,11 +89,8 @@ export default async function handler(req, res) {
         }
 
         if (req.method === 'PUT') {
-            const actorEmail = normalizeEmail(req.headers['x-actor-email'] || '');
-            const actorRole = String(req.headers['x-actor-role'] || '').toLowerCase();
-            if (actorRole !== 'admin') return json(res, 403, { error: 'Iba admin moze upravovat pristupy.' });
-            const adminOk = await isActiveAdminByEmail(supabase, actorEmail);
-            if (!adminOk) return json(res, 403, { error: 'Neplatny admin kontext.' });
+            const actor = await requireActiveAdmin(req, res, supabase);
+            if (!actor) return;
             const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket?.remoteAddress || 'unknown';
             const ipHash = hashIp(ip);
             const rate = await checkRateLimit(supabase, ipHash);
@@ -82,8 +105,8 @@ export default async function handler(req, res) {
             const { error: insError } = await supabase.from('app_users').insert(rows);
             if (insError) return json(res, 500, { error: 'Ulozenie pristupov zlyhalo.' });
             await supabase.from('admin_access_audit').insert({
-                actor_email: actorEmail,
-                actor_role: actorRole,
+                actor_email: actor.actorEmail,
+                actor_role: actor.actorRole,
                 actor_ip_hash: ipHash,
                 action: 'save_email_users',
                 payload: { count: rows.length },

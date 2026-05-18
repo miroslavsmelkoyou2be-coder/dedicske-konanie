@@ -45,6 +45,10 @@ const emailUsersState = {
     admins: [{ email: '', isActive: true }],
     heirs: Array.from({ length: 4 }, () => ({ email: '', isActive: true })),
 };
+const adminAuditState = {
+    loaded: false,
+    items: [],
+};
 
 function stopOtpCooldown() {
     if (otpCooldownTimer) {
@@ -100,6 +104,72 @@ async function loadEmailUsersState() {
         showToast('Nepodarilo sa načítať email prístupy.', 'error');
         return false;
     }
+}
+
+async function loadAdminAuditLog() {
+    if (!isAdmin()) return false;
+    const list = $('#admin-access-audit-list');
+    if (list) {
+        list.innerHTML = '<p class="text-muted small">Nacitavam audit...</p>';
+    }
+    try {
+        const response = await fetch('/api/admin/email-users?audit=1', {
+            headers: {
+                'x-actor-email': String(auth.currentUser?.email || ''),
+                'x-actor-role': String(auth.currentUser?.role || ''),
+            },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'audit_load_failed');
+        adminAuditState.items = Array.isArray(payload.items) ? payload.items : [];
+        adminAuditState.loaded = true;
+        renderAdminAuditLog();
+        return true;
+    } catch (e) {
+        adminAuditState.loaded = false;
+        if (list) {
+            list.innerHTML = '<p class="text-muted small">Audit sa nepodarilo nacitat.</p>';
+        }
+        return false;
+    }
+}
+
+function formatAuditDate(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleString('sk-SK', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+}
+
+function renderAdminAuditLog() {
+    const list = $('#admin-access-audit-list');
+    if (!list || !isAdmin()) return;
+    if (!adminAuditState.items.length) {
+        list.innerHTML = '<p class="text-muted small">Zatial ziadne ulozenia pristupov.</p>';
+        return;
+    }
+    list.innerHTML = adminAuditState.items.map((item) => {
+        const count = Number(item.payload?.count || 0);
+        const actionText = item.action === 'save_email_users' ? 'Ulozenie email pristupov' : item.action;
+        const actor = item.actor_email || 'neznamy admin';
+        return `
+            <div class="audit-row">
+                <div class="audit-row-main">
+                    <strong>${escapeHtml(actionText)}</strong>
+                    <span>${escapeHtml(actor)}</span>
+                </div>
+                <div class="audit-row-meta">
+                    <span>${formatAuditDate(item.created_at)}</span>
+                    <span>${count ? `${count} pristupov` : 'bez poctu'}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
 }
 
 function renderEmailUsersManagement() {
@@ -239,6 +309,7 @@ async function saveEmailUsersManagement() {
             }
             await loadEmailUsersState();
             renderEmailUsersManagement();
+            await loadAdminAuditLog();
             showToast('Email pristupy boli ulozene.', 'success');
         } catch (e) {
             showToast('Ulozenie email pristupov zlyhalo.', 'error');
@@ -293,6 +364,7 @@ async function saveEmailUsersManagement() {
         }
         await loadEmailUsersState();
         renderEmailUsersManagement();
+        await loadAdminAuditLog();
         showToast('Email prístupy boli uložené.', 'success');
     } catch (e) {
         showToast('Uloženie email prístupov zlyhalo.', 'error');
@@ -927,6 +999,7 @@ async function init() {
             switchAdminTab(tab);
             if (tab === 'access') {
                 renderEmailUsersManagement();
+                loadAdminAuditLog();
             }
         });
     });
@@ -977,6 +1050,7 @@ async function init() {
         applyRoleVisibility();
         if (isAdmin() && uiState.adminTab === 'access') {
             renderEmailUsersManagement();
+            loadAdminAuditLog();
         }
     }
 

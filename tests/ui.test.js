@@ -2,7 +2,7 @@
  * UI Module Tests
  *
  * Tests: formatEUR, parseEUR, escapeHtml, clamp, renderCategoryDatalist,
- *        showToast, showConfirmModal, showPinInputModal
+ *        showToast, showConfirmModal, email OTP auth UI
  */
 
 import { assert, assertEqual, printSummary } from './helpers.js';
@@ -13,7 +13,7 @@ export async function testUi({ window, document }) {
 
     const {
         formatEUR, parseEUR, escapeHtml, clamp,
-        showToast, showConfirmModal, showPinInputModal,
+        showToast, showConfirmModal, renderAuthUI,
     } = uiMod;
 
     console.log('\n\u{1F4C1} UI Module');
@@ -109,22 +109,27 @@ export async function testUi({ window, document }) {
         assertEqual(document.querySelector('#modal-confirm-text').textContent, 'OK', 'Confirm button text set');
     })();
 
-    // ─── showPinInputModal ────────────────────────────────
+    // ─── Email OTP auth UI ────────────────────────────────
     (() => {
-        console.log('  \u2500\u2500 showPinInputModal');
+        console.log('  \u2500\u2500 email OTP auth UI');
 
-        const pinModal = document.querySelector('#pin-modal');
-        assert(pinModal, 'PIN input modal exists in HTML');
+        const loginOverlay = document.querySelector('#login-overlay');
+        const emailForm = document.querySelector('#login-email-form');
+        const verifyForm = document.querySelector('#login-email-verify-form');
+        const emailInput = document.querySelector('#login-email');
+        const codeInput = document.querySelector('#login-email-code');
 
-        showPinInputModal({
-            title: 'Change PIN',
-            message: 'Enter new PIN',
-            initialValue: '',
-        });
+        assert(loginOverlay, 'Login overlay exists in HTML');
+        assert(emailForm, 'Email send form exists in HTML');
+        assert(verifyForm, 'OTP verify form exists in HTML');
+        assert(emailInput, 'Email input exists in HTML');
+        assert(codeInput, 'OTP code input exists in HTML');
 
-        assert(pinModal.classList.contains('open'), 'PIN modal opens');
-        assertEqual(document.querySelector('#pin-modal-title').textContent, 'Change PIN', 'PIN modal title set');
-        assertEqual(document.querySelector('#pin-modal-message').textContent, 'Enter new PIN', 'PIN modal message');
+        renderAuthUI();
+
+        assertEqual(loginOverlay.style.display, 'flex', 'Login overlay is visible when logged out');
+        assertEqual(emailInput.getAttribute('autocomplete'), 'email', 'Email input uses email autocomplete');
+        assertEqual(codeInput.getAttribute('maxlength'), '6', 'OTP input is limited to 6 digits');
     })();
 
     return printSummary('UI Module');
