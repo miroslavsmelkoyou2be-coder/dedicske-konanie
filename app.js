@@ -633,6 +633,8 @@ export async function setAllocation(itemId, participantId, percentage) {
     if (!Array.isArray(item.allocations)) {
         item.allocations = [];
     }
+    const previousAllocations = item.allocations.map((a) => ({ ...a }));
+    const previousParticipantAllocation = previousAllocations.find((a) => a.participantId === participantId)?.percentage || 0;
 
     // Calculate sum of other participants' allocations (excluding this one)
     const otherSum = item.allocations
@@ -675,8 +677,16 @@ export async function setAllocation(itemId, participantId, percentage) {
             action: 'set_allocation',
             entityType: 'item',
             entityId: item.id,
-            summary: `Zmenena alokacia "${item.name}" pre ${state.participants[participantId]?.name || 'dedic'} na ${cappedPct}%`,
-            payload: { itemName: item.name, participantId, requestedPercentage: pct, savedPercentage: cappedPct },
+            summary: `Zmenena alokacia "${item.name}" pre ${state.participants[participantId]?.name || 'dedic'} z ${previousParticipantAllocation}% na ${cappedPct}%`,
+            payload: {
+                itemName: item.name,
+                participantId,
+                requestedPercentage: pct,
+                previousPercentage: previousParticipantAllocation,
+                savedPercentage: cappedPct,
+                previousAllocations,
+                nextAllocations: item.allocations.map((a) => ({ ...a })),
+            },
         },
     });
     renderAll();
