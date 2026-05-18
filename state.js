@@ -347,7 +347,9 @@ export function syncCashItem() {
     cashItem.name = 'Hotovosť';
     cashItem.category = 'Hotovosť';
     cashItem.value = remainingCash;
-    cashItem.allocations = [];
+    if (!Array.isArray(cashItem.allocations)) {
+        cashItem.allocations = [];
+    }
 
     // --- Item 2: Hotovosť na pokrytie nákladov (id=-2) ---
     let expenseItem = _state.items.find(i => i.id === CASH_EXPENSE_ITEM_ID);

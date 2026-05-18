@@ -165,6 +165,13 @@ export async function testState({ window, document }) {
         assertEqual(cashItem.value, 5000, 'Cash item = remaining (10000 - 5000)');
         assertEqual(cashItem.name, 'Hotovos\u0165', 'Cash item name');
 
+        cashItem.allocations = [{ participantId: 1, percentage: 5 }];
+        st.cash = 12000;
+        syncCashItem();
+        assertEqual(cashItem.value, 7000, 'Cash item value updates after cash change');
+        assertEqual(cashItem.allocations.length, 1, 'Cash item manual allocation is preserved');
+        assertEqual(cashItem.allocations[0].percentage, 5, 'Cash item manual allocation percentage is preserved');
+
         const expenseItem = st.items.find(i => i.id === CASH_EXPENSE_ITEM_ID);
         assert(expenseItem, 'Cash expense item exists');
         assertEqual(expenseItem.value, 5000, 'Expense item = expense cash (min(10000, 5000))');
