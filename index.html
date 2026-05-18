@@ -107,6 +107,13 @@
                     </svg>
                     Správa prístupov
                 </button>
+                <button class="admin-nav-btn" data-tab="audit">
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                        <path d="M5 3h8a1 1 0 011 1v10a1 1 0 01-1 1H5a1 1 0 01-1-1V4a1 1 0 011-1z" stroke="currentColor" stroke-width="1.5"/>
+                        <path d="M7 7h4M7 10h4M7 13h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    </svg>
+                    Audit zmien
+                </button>
             </nav>
 
             <!-- Heir Navigation -->
@@ -486,15 +493,6 @@
                         <p class="text-muted small">Audit sa načíta po otvorení správy prístupov.</p>
                     </div>
                 </div>
-                <div class="admin-audit-panel">
-                    <div class="card-header">
-                        <h3>Audit používateľských zmien</h3>
-                        <p>Posledné zmeny majetku, nákladov, hotovosti a alokácií.</p>
-                    </div>
-                    <div class="admin-audit-list" id="user-change-audit-list">
-                        <p class="text-muted small">Audit zmien sa načíta po otvorení správy prístupov.</p>
-                    </div>
-                </div>
                 <div class="pins-actions">
                     <button class="btn btn-secondary" id="logout-btn">
                         <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -502,6 +500,17 @@
                         </svg>
                         Odhlásiť sa
                     </button>
+                </div>
+            </section>
+
+            <!-- Admin: User Change Audit -->
+            <section class="card card-pins" id="user-audit-section" style="display:none;">
+                <div class="card-header">
+                    <h2>Audit používateľských zmien</h2>
+                    <p>Posledné zmeny majetku, nákladov, hotovosti a alokácií.</p>
+                </div>
+                <div class="admin-audit-list" id="user-change-audit-list">
+                    <p class="text-muted small">Audit zmien sa načíta po otvorení tejto záložky.</p>
                 </div>
             </section>
 

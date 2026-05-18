@@ -1180,6 +1180,8 @@ async function init() {
             if (tab === 'access') {
                 renderEmailUsersManagement();
                 loadAdminAuditLog();
+            }
+            if (tab === 'audit') {
                 loadUserChangeAudit();
             }
         });
@@ -1232,6 +1234,8 @@ async function init() {
         if (isAdmin() && uiState.adminTab === 'access') {
             renderEmailUsersManagement();
             loadAdminAuditLog();
+        }
+        if (isAdmin() && uiState.adminTab === 'audit') {
             loadUserChangeAudit();
         }
     }

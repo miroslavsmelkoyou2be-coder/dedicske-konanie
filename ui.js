@@ -214,6 +214,7 @@ export function applyRoleVisibility() {
     const addForm = $('#add-item-section');
     const actions = document.querySelector('.card-actions');
     const pinsSection = $('#pins-section');
+    const userAuditSection = $('#user-audit-section');
     const cashSection = $('#cash-section');
     const expensesSection = $('#expenses-section');
     const itemsSection = $('#items-section');
@@ -237,6 +238,7 @@ export function applyRoleVisibility() {
         hide(addForm);
         hide(actions);
         hide(pinsSection);
+        hide(userAuditSection);
         hide(cashSection);
         hide(expensesSection);
         hide(itemsSection);
@@ -278,6 +280,9 @@ export function applyRoleVisibility() {
                 case 'access':
                     show(pinsSection);
                     break;
+                case 'audit':
+                    show(userAuditSection);
+                    break;
             }
     } else {
         // Heir – hide admin-only sections, show heir-nav with tab switching
@@ -287,6 +292,7 @@ export function applyRoleVisibility() {
         if (addForm) addForm.style.display = 'none';
         if (actions) actions.style.display = 'none';
         if (pinsSection) pinsSection.style.display = 'none';
+        if (userAuditSection) userAuditSection.style.display = 'none';
 
         // Hide admin-only parts (cash input + add expense form)
         const cashTotalRow = document.querySelector('.cash-total-row');
@@ -335,6 +341,8 @@ export function switchAdminTab(tab) {
             renderExpensesSection();
             break;
         case 'access':
+            break;
+        case 'audit':
             break;
     }
 }
