@@ -127,9 +127,8 @@ async function loadUserChangeAudit() {
     }
     try {
         const { data, error } = await supabase
-            .from('admin_access_audit')
-            .select('actor_email, actor_role, action, payload, created_at')
-            .like('action', 'user_%')
+            .from('user_change_audit')
+            .select('actor_email, actor_role, actor_participant_id, action, entity_type, entity_id, summary, payload, created_at')
             .order('created_at', { ascending: false })
             .limit(30);
         if (error) throw error;
@@ -241,8 +240,8 @@ function renderUserChangeAudit() {
     }
     list.innerHTML = userAuditState.items.map((item) => {
         const actor = item.actor_email || (item.actor_role === 'admin' ? 'admin' : 'pouzivatel');
-        const summary = item.payload?.summary || getAuditActionLabel(item.action);
-        const entityType = item.payload?.entity_type || 'data';
+        const summary = item.summary || getAuditActionLabel(item.action);
+        const entityType = item.entity_type || 'data';
         return `
             <div class="audit-row">
                 <div class="audit-row-main">

@@ -99,19 +99,16 @@ async function recordUserChangeAudit(audit) {
     const actor = normalizeAuditActor(audit.actor || {});
     try {
         const { error } = await supabase
-            .from('admin_access_audit')
+            .from('user_change_audit')
             .insert({
                 actor_email: actor.email,
                 actor_role: actor.role,
-                actor_ip_hash: null,
-                action: `user_${audit.action}`,
-                payload: {
-                    actor_participant_id: actor.participantId,
-                    entity_type: audit.entityType || null,
-                    entity_id: audit.entityId !== undefined && audit.entityId !== null ? String(audit.entityId) : null,
-                    summary: audit.summary || null,
-                    details: audit.payload || {},
-                },
+                actor_participant_id: actor.participantId,
+                action: audit.action,
+                entity_type: audit.entityType || null,
+                entity_id: audit.entityId !== undefined && audit.entityId !== null ? String(audit.entityId) : null,
+                summary: audit.summary || null,
+                payload: audit.payload || {},
             });
         if (error) {
             console.warn('User audit insert error:', error);

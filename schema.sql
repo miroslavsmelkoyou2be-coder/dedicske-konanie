@@ -69,3 +69,28 @@ CREATE INDEX IF NOT EXISTS idx_admin_access_audit_created
 ON admin_access_audit (created_at DESC);
 
 ALTER TABLE admin_access_audit DISABLE ROW LEVEL SECURITY;
+
+-- 6. User-visible app changes audit
+CREATE TABLE IF NOT EXISTS user_change_audit (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    actor_email TEXT,
+    actor_role TEXT,
+    actor_participant_id INTEGER,
+    action TEXT NOT NULL,
+    entity_type TEXT,
+    entity_id TEXT,
+    summary TEXT,
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_change_audit_created
+ON user_change_audit (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_user_change_audit_actor_created
+ON user_change_audit (actor_email, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_user_change_audit_action_created
+ON user_change_audit (action, created_at DESC);
+
+ALTER TABLE user_change_audit DISABLE ROW LEVEL SECURITY;
