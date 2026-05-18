@@ -857,6 +857,16 @@ body {
     -moz-appearance: textfield;
 }
 
+.alloc-value-readonly {
+    min-width: 72px;
+    padding: 0.125rem 0.25rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text);
+    text-align: right;
+    white-space: nowrap;
+}
+
 .alloc-input::-webkit-outer-spin-button,
 .alloc-input::-webkit-inner-spin-button {
     -webkit-appearance: none;

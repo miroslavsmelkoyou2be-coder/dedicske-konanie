@@ -407,6 +407,7 @@ export function renderItems() {
         getState().participants.forEach((p) => {
             const alloc = (item.allocations || []).find(a => a.participantId === p.id);
             const pct = alloc ? alloc.percentage : 0;
+            const allocationValue = item.value * pct / 100;
             const fillColor = getPColor(p.id);
 
             // Calculate max allowed for this participant on this item
@@ -425,10 +426,11 @@ export function renderItems() {
 
             const isAllocationEditableSystemItem = isCashItem;
             const inputDisabled = !canEditAllocations(p.id) || (isSystemItem && !isAllocationEditableSystemItem);
-            allocHtml += `
-                <div class="alloc-field${limitClass}" style="--alloc-color: ${fillColor};">
-                    <span class="alloc-label">${escapeHtml(p.name.slice(0, 10))}</span>
-                    <div class="alloc-input-wrap" data-pct-value="${pct.toFixed(2)}%" style="--pct:${Math.max(0, Math.min(100, pct)).toFixed(2)}%;">
+            const allocControlHtml = isCashExpenseItem
+                ? `<div class="alloc-input-wrap alloc-value-wrap" data-pct-value="${formatEUR(allocationValue)}" style="--pct:${Math.max(0, Math.min(100, pct)).toFixed(2)}%;">
+                        <span class="alloc-value-readonly">${formatEUR(allocationValue)}</span>
+                   </div>`
+                : `<div class="alloc-input-wrap" data-pct-value="${pct.toFixed(2)}%" style="--pct:${Math.max(0, Math.min(100, pct)).toFixed(2)}%;">
                         <input type="number" class="alloc-input" value="${pct.toFixed(2)}"
                             min="0" max="${maxAllowed}" step="0.00000001"
                             data-item-id="${item.id}" data-participant-id="${p.id}"
@@ -436,7 +438,11 @@ export function renderItems() {
                             title="${inputDisabled ? 'Nementieľné – iba administrátor alebo daný dedič' : `Voľné miesto: ${maxAllowed.toFixed(2)}%`}"
                             ${inputDisabled ? 'disabled' : ''} />
                         <span class="alloc-suffix">%</span>
-                    </div>
+                   </div>`;
+            allocHtml += `
+                <div class="alloc-field${limitClass}" style="--alloc-color: ${fillColor};">
+                    <span class="alloc-label">${escapeHtml(p.name.slice(0, 10))}</span>
+                    ${allocControlHtml}
                 </div>
             `;
         });
@@ -490,7 +496,7 @@ export function renderItems() {
         const allocRightMetaHtml = useBottomMeta
             ? `<div class="item-row-alloc-right">
                     <span class="item-value">${valueHtml}</span>
-                    <span class="item-alloc-summary item-alloc-summary-emph ${isOverallocated ? 'over' : ''}" style="--pct:${Math.max(0, Math.min(100, allocPct)).toFixed(2)}%;">${allocPct.toFixed(2)}%</span>
+                    <span class="item-alloc-summary item-alloc-summary-emph ${isOverallocated ? 'over' : ''}" style="--pct:${Math.max(0, Math.min(100, allocPct)).toFixed(2)}%;">${isCashExpenseItem ? formatEUR(item.value * Math.min(allocPct, 100) / 100) : `${allocPct.toFixed(2)}%`}</span>
                </div>`
             : '';
 
